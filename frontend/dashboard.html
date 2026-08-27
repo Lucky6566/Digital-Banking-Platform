@@ -1,0 +1,1680 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <meta
+        name="description"
+        content="DigitalBank secure banking dashboard"
+    >
+
+    <title>DigitalBank — Dashboard</title>
+
+    <link
+        rel="stylesheet"
+        href="dashboard.css"
+    >
+</head>
+
+<body>
+
+    <!-- =====================================================
+         STEP 7.2 — BANKING NOTIFICATION
+         ===================================================== -->
+
+    <div
+        id="bankingNotification"
+        class="banking-notification"
+        role="alert"
+        aria-live="polite"
+    >
+
+        <div
+            class="notification-icon"
+            id="notificationIcon"
+        >
+            ✓
+        </div>
+
+        <div class="notification-content">
+
+            <strong id="notificationTitle">
+                Transaction Successful
+            </strong>
+
+            <span id="notificationMessage">
+                Your transaction was completed successfully.
+            </span>
+
+        </div>
+
+        <button
+            type="button"
+            id="notificationClose"
+            class="notification-close"
+            aria-label="Close notification"
+        >
+            ×
+        </button>
+
+    </div>
+
+
+    <!-- =====================================================
+         APP SHELL
+    ====================================================== -->
+
+    <div class="app-shell">
+
+
+        <!-- =================================================
+             SIDEBAR
+        ================================================== -->
+
+        <aside class="sidebar">
+
+            <div class="sidebar-top">
+
+                <!-- BRAND -->
+
+                <div class="brand">
+
+                    <div class="brand-logo">
+                        DB
+                    </div>
+
+                    <div class="brand-text">
+
+                        <h2>
+                            DigitalBank
+                        </h2>
+
+                        <span>
+                            Smart Banking
+                        </span>
+
+                    </div>
+
+                </div>
+
+
+                <div class="sidebar-divider"></div>
+
+
+                <!-- NAVIGATION -->
+
+                <nav class="sidebar-nav">
+
+                    <p class="nav-section-title">
+                        MAIN MENU
+                    </p>
+
+
+                    <button
+                        type="button"
+                        class="nav-item active"
+                        id="dashboardNavBtn"
+                    >
+
+                        <span class="nav-icon">
+                            ⌂
+                        </span>
+
+                        <span>
+                            Dashboard
+                        </span>
+
+                    </button>
+
+
+                    <button
+                        type="button"
+                        class="nav-item"
+                        id="transactionsBtn"
+                    >
+
+                        <span class="nav-icon">
+                            ↔
+                        </span>
+
+                        <span>
+                            Transactions
+                        </span>
+
+                    </button>
+
+                </nav>
+
+            </div>
+
+
+            <!-- SIDEBAR BOTTOM -->
+
+            <div class="sidebar-bottom">
+
+                <div class="security-card">
+
+                    <div class="security-icon">
+                        ✓
+                    </div>
+
+                    <div>
+
+                        <strong>
+                            Secure Banking
+                        </strong>
+
+                        <span>
+                            Your account is protected
+                        </span>
+
+                    </div>
+
+                </div>
+
+
+                <button
+                    type="button"
+                    class="logout-btn"
+                    id="logoutBtn"
+                >
+
+                    <span class="nav-icon">
+                        ↪
+                    </span>
+
+                    <span>
+                        Logout
+                    </span>
+
+                </button>
+
+            </div>
+
+        </aside>
+
+
+
+        <!-- =================================================
+             MAIN CONTENT
+        ================================================== -->
+
+        <main class="main-content">
+
+
+            <!-- =================================================
+                 TOPBAR
+            ================================================== -->
+
+            <header class="topbar">
+
+                <div class="topbar-left">
+
+                    <div class="breadcrumb">
+
+                        <span>
+                            Home
+                        </span>
+
+                        <span>
+                            /
+                        </span>
+
+                        <strong>
+                            Dashboard
+                        </strong>
+
+                    </div>
+
+
+                    <p class="eyebrow">
+                        DIGITAL BANKING
+                    </p>
+
+
+                    <h1 id="welcomeMessage">
+                        Welcome back!
+                    </h1>
+
+
+                    <p class="subtitle">
+                        Manage your account and track your financial activity.
+                    </p>
+
+                </div>
+
+
+
+                <!-- =================================================
+                     LIVE DASHBOARD STATUS
+                ================================================== -->
+
+                <div class="live-dashboard-status">
+
+                    <span class="live-status-dot"></span>
+
+                    <span
+    class="live-status-text"
+    id="liveStatusText"
+>
+    Offline
+</span>
+
+                    <span class="last-updated">
+                        Last updated:
+                        <span id="lastUpdated">
+                            --
+                        </span>
+                    </span>
+
+                </div>
+
+
+
+                <!-- =================================================
+                     TOPBAR RIGHT
+                ================================================== -->
+
+                <div class="topbar-right">
+
+                    <button
+                        type="button"
+                        class="top-icon-btn"
+                        id="refreshBtn"
+                        title="Refresh account"
+                        aria-label="Refresh account"
+                    >
+                        ↻
+                    </button>
+
+
+                    <div class="online-status">
+
+                        <span class="status-dot"></span>
+
+                        <span>
+                            Online
+                        </span>
+
+                    </div>
+
+
+                    <div class="profile-box">
+
+                        <div class="profile-avatar">
+                            <span>
+                                👤
+                            </span>
+                        </div>
+
+
+                        <div class="profile-info">
+
+                            <strong id="profileName">
+                                Loading...
+                            </strong>
+
+                            <span id="profileEmail">
+                                Loading...
+                            </span>
+
+                        </div>
+
+
+                        <span class="profile-arrow">
+                            ▾
+                        </span>
+
+                    </div>
+
+                </div>
+
+            </header>
+
+
+
+            <!-- =================================================
+                 ACCOUNT OVERVIEW
+            ================================================== -->
+
+            <section class="section">
+
+                <div class="section-heading">
+
+                    <div>
+
+                        <p class="section-label">
+                            ACCOUNT OVERVIEW
+                        </p>
+
+                        <h2>
+                            Your finances at a glance
+                        </h2>
+
+                    </div>
+
+
+                    <button
+                        type="button"
+                        class="refresh-btn"
+                        id="refreshBtnSecondary"
+                    >
+                        ↻ Refresh data
+                    </button>
+
+                </div>
+
+
+
+                <!-- STATS -->
+
+                <div class="stats-grid">
+
+
+                    <!-- BALANCE -->
+
+                    <div class="stat-card balance-card">
+
+                        <div class="stat-card-top">
+
+                            <div class="stat-icon balance-icon">
+                                ₹
+                            </div>
+
+                            <span class="stat-status positive">
+                                ● Available
+                            </span>
+
+                        </div>
+
+
+                        <div class="stat-content">
+
+                            <span class="stat-label">
+                                Available Balance
+                            </span>
+
+                            <strong
+                                class="stat-value"
+                                id="balance"
+                            >
+                                ₹0.00
+                            </strong>
+
+                            <span class="stat-description">
+                                Current account balance
+                            </span>
+
+                        </div>
+
+                    </div>
+
+
+
+                    <!-- DEPOSITS -->
+
+                    <div class="stat-card">
+
+                        <div class="stat-card-top">
+
+                            <div class="stat-icon deposit-icon">
+                                ↓
+                            </div>
+
+                            <span class="stat-status positive">
+                                Income
+                            </span>
+
+                        </div>
+
+
+                        <div class="stat-content">
+
+                            <span class="stat-label">
+                                Total Deposits
+                            </span>
+
+                            <strong
+                                class="stat-value"
+                                id="totalDeposits"
+                            >
+                                ₹0.00
+                            </strong>
+
+                            <span class="stat-description">
+                                Money added to account
+                            </span>
+
+                        </div>
+
+                    </div>
+
+
+
+                    <!-- WITHDRAWALS -->
+
+                    <div class="stat-card">
+
+                        <div class="stat-card-top">
+
+                            <div class="stat-icon withdrawal-icon">
+                                ↑
+                            </div>
+
+                            <span class="stat-status negative">
+                                Spending
+                            </span>
+
+                        </div>
+
+
+                        <div class="stat-content">
+
+                            <span class="stat-label">
+                                Total Withdrawals
+                            </span>
+
+                            <strong
+                                class="stat-value"
+                                id="totalWithdrawals"
+                            >
+                                ₹0.00
+                            </strong>
+
+                            <span class="stat-description">
+                                Money withdrawn
+                            </span>
+
+                        </div>
+
+                    </div>
+
+
+
+                    <!-- TRANSFERS -->
+
+                    <div class="stat-card">
+
+                        <div class="stat-card-top">
+
+                            <div class="stat-icon transfer-icon">
+                                ↔
+                            </div>
+
+                            <span class="stat-status purple">
+                                Transfers
+                            </span>
+
+                        </div>
+
+
+                        <div class="stat-content">
+
+                            <span class="stat-label">
+                                Total Transfers
+                            </span>
+
+                            <strong
+                                class="stat-value"
+                                id="totalTransfers"
+                            >
+                                ₹0.00
+                            </strong>
+
+                            <span class="stat-description">
+                                Money transferred
+                            </span>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+
+
+            <!-- =================================================
+                 ACCOUNT DETAILS
+            ================================================== -->
+
+            <section class="account-panel">
+
+                <div class="account-panel-header">
+
+                    <div>
+
+                        <p class="section-label">
+                            ACCOUNT DETAILS
+                        </p>
+
+                        <h2>
+                            Banking Information
+                        </h2>
+
+                    </div>
+
+
+                    <div class="verified-badge">
+
+                        <span>
+                            ●
+                        </span>
+
+                        Active Account
+
+                    </div>
+
+                </div>
+
+
+
+                <div class="account-details-grid">
+
+
+                    <!-- ACCOUNT NUMBER -->
+
+                    <div class="account-detail">
+
+                        <div class="detail-icon">
+                            #
+                        </div>
+
+                        <div>
+
+                            <span>
+                                Account Number
+                            </span>
+
+                            <strong id="accountNumber">
+                                Loading...
+                            </strong>
+
+                        </div>
+
+                    </div>
+
+
+
+                    <!-- ACCOUNT TYPE -->
+
+                    <div class="account-detail">
+
+                        <div class="detail-icon">
+                            $
+                        </div>
+
+                        <div>
+
+                            <span>
+                                Account Type
+                            </span>
+
+                            <strong id="accountType">
+                                Savings
+                            </strong>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+
+
+            <!-- =================================================
+                 QUICK ACTIONS
+            ================================================== -->
+
+            <section class="section">
+
+                <div class="section-heading">
+
+                    <div>
+
+                        <p class="section-label">
+                            QUICK ACTIONS
+                        </p>
+
+                        <h2>
+                            Manage your money
+                        </h2>
+
+                    </div>
+
+                </div>
+
+
+                <div class="quick-actions">
+
+
+                    <!-- DEPOSIT -->
+
+                    <button
+                        type="button"
+                        class="action-card deposit-action"
+                        id="depositBtn"
+                    >
+
+                        <div class="action-icon">
+                            ↓
+                        </div>
+
+                        <div class="action-content">
+
+                            <strong>
+                                Deposit
+                            </strong>
+
+                            <span>
+                                Add money to your account
+                            </span>
+
+                        </div>
+
+                        <div class="action-arrow">
+                            →
+                        </div>
+
+                    </button>
+
+
+
+                    <!-- WITHDRAW -->
+
+                    <button
+                        type="button"
+                        class="action-card withdraw-action"
+                        id="withdrawBtn"
+                    >
+
+                        <div class="action-icon">
+                            ↑
+                        </div>
+
+                        <div class="action-content">
+
+                            <strong>
+                                Withdraw
+                            </strong>
+
+                            <span>
+                                Withdraw money from account
+                            </span>
+
+                        </div>
+
+                        <div class="action-arrow">
+                            →
+                        </div>
+
+                    </button>
+
+
+
+                    <!-- TRANSFER -->
+
+                    <button
+                        type="button"
+                        class="action-card transfer-action"
+                        id="transferBtn"
+                    >
+
+                        <div class="action-icon">
+                            ↔
+                        </div>
+
+                        <div class="action-content">
+
+                            <strong>
+                                Transfer
+                            </strong>
+
+                            <span>
+                                Send money to another account
+                            </span>
+
+                        </div>
+
+                        <div class="action-arrow">
+                            →
+                        </div>
+
+                    </button>
+
+                </div>
+
+            </section>
+
+
+
+            <!-- =================================================
+                 ANALYTICS
+            ================================================== -->
+
+            <section class="analytics-grid">
+
+
+                <!-- TRANSACTION ANALYTICS -->
+
+                <div class="analytics-card">
+
+                    <div class="card-header">
+
+                        <div>
+
+                            <p class="section-label">
+                                TRANSACTION ANALYTICS
+                            </p>
+
+                            <h2>
+                                Activity Overview
+                            </h2>
+
+                        </div>
+
+
+                        <span class="live-badge">
+
+                            <span></span>
+
+                            LIVE
+
+                        </span>
+
+                    </div>
+
+
+
+                    <div class="analytics-stats">
+
+
+                        <div class="mini-stat">
+
+                            <span>
+                                Transactions
+                            </span>
+
+                            <strong id="analyticsTotalTransactions">
+                                0
+                            </strong>
+
+                        </div>
+
+
+                        <div class="mini-stat">
+
+                            <span>
+                                Money In
+                            </span>
+
+                            <strong id="analyticsCredits">
+                                ₹0.00
+                            </strong>
+
+                        </div>
+
+
+                        <div class="mini-stat">
+
+                            <span>
+                                Money Out
+                            </span>
+
+                            <strong id="analyticsDebits">
+                                ₹0.00
+                            </strong>
+
+                        </div>
+
+
+                        <div class="mini-stat">
+
+                            <span>
+                                Average
+                            </span>
+
+                            <strong id="analyticsAverage">
+                                ₹0.00
+                            </strong>
+
+                        </div>
+
+                    </div>
+
+
+
+                    <!-- ACTIVITY BARS -->
+
+                    <div class="activity-bars">
+
+
+                        <div class="activity-row">
+
+                            <div class="activity-label">
+
+                                <span>
+
+                                    <i class="legend-dot deposit-dot"></i>
+
+                                    Deposits
+
+                                </span>
+
+                                <strong id="analyticsDeposits">
+                                    0
+                                </strong>
+
+                            </div>
+
+
+                            <div class="progress-track">
+
+                                <div
+                                    class="progress-fill deposit-fill"
+                                    id="depositProgress"
+                                ></div>
+
+                            </div>
+
+                        </div>
+
+
+
+                        <div class="activity-row">
+
+                            <div class="activity-label">
+
+                                <span>
+
+                                    <i class="legend-dot withdrawal-dot"></i>
+
+                                    Withdrawals
+
+                                </span>
+
+                                <strong id="analyticsWithdrawals">
+                                    0
+                                </strong>
+
+                            </div>
+
+
+                            <div class="progress-track">
+
+                                <div
+                                    class="progress-fill withdrawal-fill"
+                                    id="withdrawalProgress"
+                                ></div>
+
+                            </div>
+
+                        </div>
+
+
+
+                        <div class="activity-row">
+
+                            <div class="activity-label">
+
+                                <span>
+
+                                    <i class="legend-dot transfer-dot"></i>
+
+                                    Transfers
+
+                                </span>
+
+                                <strong id="analyticsTransfers">
+                                    0
+                                </strong>
+
+                            </div>
+
+
+                            <div class="progress-track">
+
+                                <div
+                                    class="progress-fill transfer-fill"
+                                    id="transferProgress"
+                                ></div>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+
+                <!-- =================================================
+                     FINANCIAL HEALTH
+                ================================================== -->
+
+                <div class="health-card">
+
+                    <div class="card-header">
+
+                        <div>
+
+                            <p class="section-label">
+                                FINANCIAL HEALTH
+                            </p>
+
+                            <h2>
+                                Your Score
+                            </h2>
+
+                        </div>
+
+
+                        <span class="health-badge">
+                            Healthy
+                        </span>
+
+                    </div>
+
+
+
+                    <div class="health-score">
+
+                        <div class="score-circle">
+
+                            <div class="score-inner">
+
+                                <strong id="scoreCircleValue">
+                                    70
+                                </strong>
+
+                                <span>
+                                    /100
+                                </span>
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="health-info">
+
+                            <strong id="financialHealthScore">
+                                70
+                            </strong>
+
+                            <span id="financialHealthStatus">
+                                Good
+                            </span>
+
+                            <small>
+                                Financial health score
+                            </small>
+
+                        </div>
+
+                    </div>
+
+
+
+                    <p
+                        class="health-message"
+                        id="financialHealthMessage"
+                    >
+                        Your financial position is stable.
+                    </p>
+
+
+
+                    <div class="health-metrics">
+
+
+                        <div class="health-row">
+
+                            <div class="health-row-header">
+                                <span>
+                                    Income activity
+                                </span>
+                            </div>
+
+                            <div class="progress-track">
+
+                                <div
+                                    class="progress-fill deposit-fill"
+                                    id="healthDepositProgress"
+                                ></div>
+
+                            </div>
+
+                        </div>
+
+
+
+                        <div class="health-row">
+
+                            <div class="health-row-header">
+                                <span>
+                                    Spending activity
+                                </span>
+                            </div>
+
+                            <div class="progress-track">
+
+                                <div
+                                    class="progress-fill withdrawal-fill"
+                                    id="healthWithdrawalProgress"
+                                ></div>
+
+                            </div>
+
+                        </div>
+
+
+
+                        <div class="health-row">
+
+                            <div class="health-row-header">
+                                <span>
+                                    Transfer activity
+                                </span>
+                            </div>
+
+                            <div class="progress-track">
+
+                                <div
+                                    class="progress-fill transfer-fill"
+                                    id="healthTransferProgress"
+                                ></div>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+
+
+            <!-- =================================================
+                 CASH FLOW
+            ================================================== -->
+
+            <section class="cashflow-card">
+
+                <div class="card-header">
+
+                    <div>
+
+                        <p class="section-label">
+                            CASH FLOW
+                        </p>
+
+                        <h2>
+                            Financial Movement
+                        </h2>
+
+                    </div>
+
+                </div>
+
+
+
+                <div class="cashflow-grid">
+
+
+                    <!-- MONEY IN -->
+
+                    <div class="cashflow-item">
+
+                        <div class="cashflow-icon income">
+                            ↓
+                        </div>
+
+                        <div>
+
+                            <span>
+                                Money In
+                            </span>
+
+                            <strong id="analyticsMoneyIn">
+                                ₹0.00
+                            </strong>
+
+                        </div>
+
+                    </div>
+
+
+
+                    <!-- MONEY OUT -->
+
+                    <div class="cashflow-item">
+
+                        <div class="cashflow-icon expense">
+                            ↑
+                        </div>
+
+                        <div>
+
+                            <span>
+                                Money Out
+                            </span>
+
+                            <strong id="analyticsMoneyOut">
+                                ₹0.00
+                            </strong>
+
+                        </div>
+
+                    </div>
+
+
+
+                    <!-- NET FLOW -->
+
+                    <div class="cashflow-item net">
+
+                        <div class="cashflow-icon net-icon">
+                            ↗
+                        </div>
+
+                        <div>
+
+                            <span>
+                                Net Flow
+                            </span>
+
+                            <strong id="analyticsNetFlow">
+                                ₹0.00
+                            </strong>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+
+
+            <!-- =================================================
+                 TRANSACTION HISTORY
+            ================================================== -->
+
+            <section
+                class="transactions-section"
+                id="transactionsSection"
+            >
+
+                <div class="section-heading">
+
+                    <div>
+
+                        <p class="section-label">
+                            TRANSACTION HISTORY
+                        </p>
+
+                        <h2 id="transactionsTitle">
+                            Recent Transactions
+                        </h2>
+
+                    </div>
+
+                </div>
+
+
+
+                <!-- CONTROLS -->
+
+                <div class="transaction-controls">
+
+
+                    <div class="search-wrapper">
+
+                        <span class="search-icon">
+                            ⌕
+                        </span>
+
+                        <input
+                            type="search"
+                            id="transactionSearch"
+                            placeholder="Search transactions..."
+                            autocomplete="off"
+                        >
+
+                    </div>
+
+
+
+                    <select id="transactionFilter">
+
+                        <option value="all">
+                            All Transactions
+                        </option>
+
+                        <option value="deposit">
+                            Deposits
+                        </option>
+
+                        <option value="withdrawal">
+                            Withdrawals
+                        </option>
+
+                        <option value="transfer">
+                            Transfers
+                        </option>
+
+                    </select>
+
+                </div>
+
+
+
+                <!-- TRANSACTIONS -->
+
+                <div
+                    class="transactions-container"
+                    id="transactionsContainer"
+                >
+
+                    <p class="loading">
+                        Loading transactions...
+                    </p>
+
+                </div>
+
+            </section>
+
+
+
+            <!-- =================================================
+                 TRANSACTION VISUALIZATION
+            ================================================== -->
+
+            <section class="visualization-card">
+
+                <div class="card-header">
+
+                    <div>
+
+                        <p class="section-label">
+                            TRANSACTION VISUALIZATION
+                        </p>
+
+                        <h2>
+                            Activity Distribution
+                        </h2>
+
+                    </div>
+
+                </div>
+
+
+
+                <div class="visual-bars">
+
+
+                    <!-- DEPOSITS -->
+
+                    <div class="visual-row">
+
+                        <div class="visual-title">
+
+                            <span>
+
+                                <i class="legend-dot deposit-dot"></i>
+
+                                Deposits
+
+                            </span>
+
+                            <strong id="chartDepositCount">
+                                0
+                            </strong>
+
+                        </div>
+
+
+                        <div class="visual-track">
+
+                            <div
+                                class="visual-fill deposit-fill"
+                                id="chartDepositBar"
+                            ></div>
+
+                        </div>
+
+                    </div>
+
+
+
+                    <!-- WITHDRAWALS -->
+
+                    <div class="visual-row">
+
+                        <div class="visual-title">
+
+                            <span>
+
+                                <i class="legend-dot withdrawal-dot"></i>
+
+                                Withdrawals
+
+                            </span>
+
+                            <strong id="chartWithdrawalCount">
+                                0
+                            </strong>
+
+                        </div>
+
+
+                        <div class="visual-track">
+
+                            <div
+                                class="visual-fill withdrawal-fill"
+                                id="chartWithdrawalBar"
+                            ></div>
+
+                        </div>
+
+                    </div>
+
+
+
+                    <!-- TRANSFERS -->
+
+                    <div class="visual-row">
+
+                        <div class="visual-title">
+
+                            <span>
+
+                                <i class="legend-dot transfer-dot"></i>
+
+                                Transfers
+
+                            </span>
+
+                            <strong id="chartTransferCount">
+                                0
+                            </strong>
+
+                        </div>
+
+
+                        <div class="visual-track">
+
+                            <div
+                                class="visual-fill transfer-fill"
+                                id="chartTransferBar"
+                            ></div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+
+                <!-- CHART SUMMARY -->
+
+                <div class="chart-summary">
+
+
+                    <div>
+
+                        <span>
+                            Money In
+                        </span>
+
+                        <strong id="chartMoneyIn">
+                            ₹0.00
+                        </strong>
+
+                    </div>
+
+
+                    <div>
+
+                        <span>
+                            Money Out
+                        </span>
+
+                        <strong id="chartMoneyOut">
+                            ₹0.00
+                        </strong>
+
+                    </div>
+
+
+                    <div>
+
+                        <span>
+                            Net Flow
+                        </span>
+
+                        <strong id="chartNetFlow">
+                            ₹0.00
+                        </strong>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+
+
+            <!-- =================================================
+                 FOOTER
+            ================================================== -->
+
+            <footer class="dashboard-footer">
+
+                <span>
+                    © 2026 DigitalBank
+                </span>
+
+                <span>
+                    Secure • Reliable • Smart Banking
+                </span>
+
+            </footer>
+
+        </main>
+
+    </div>
+
+
+
+    <!-- =====================================================
+         TRANSACTION MODAL
+    ====================================================== -->
+
+    <div
+        class="modal"
+        id="transactionModal"
+        aria-hidden="true"
+    >
+
+        <div class="modal-overlay"></div>
+
+
+        <div
+            class="modal-content"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modalTitle"
+        >
+
+
+            <!-- MODAL HEADER -->
+
+            <div class="modal-header">
+
+                <div>
+
+                    <p class="section-label">
+                        TRANSACTION
+                    </p>
+
+                    <h2 id="modalTitle">
+                        Transaction
+                    </h2>
+
+                </div>
+
+
+                <button
+                    type="button"
+                    class="modal-close"
+                    id="closeModalBtn"
+                    aria-label="Close transaction window"
+                >
+                    ×
+                </button>
+
+            </div>
+
+
+
+            <!-- SECURITY MESSAGE -->
+
+            <div class="modal-security-note">
+
+                <span>
+                    🔒
+                </span>
+
+                <span>
+                    Your transaction is processed securely.
+                </span>
+
+            </div>
+
+
+
+            <!-- FORM -->
+
+            <form id="transactionForm">
+
+
+                <!-- AMOUNT -->
+
+                <div class="form-group">
+
+                    <label for="transactionAmount">
+                        Amount
+                    </label>
+
+
+                    <div class="amount-input">
+
+                        <span>
+                            ₹
+                        </span>
+
+                        <input
+                            type="number"
+                            id="transactionAmount"
+                            min="0.01"
+                            step="0.01"
+                            placeholder="0.00"
+                            required
+                            autocomplete="off"
+                        >
+
+                    </div>
+
+                </div>
+
+
+
+                <!-- RECEIVER -->
+
+                <div
+                    class="form-group"
+                    id="recipientGroup"
+                    style="display:none;"
+                >
+
+                    <label for="recipientAccount">
+                        Receiver Account Number
+                    </label>
+
+                    <input
+                        type="text"
+                        id="recipientAccount"
+                        placeholder="Enter receiver account number"
+                        autocomplete="off"
+                    >
+
+                </div>
+
+
+
+                <!-- TRANSACTION MESSAGE -->
+
+                <p
+                    class="transaction-message"
+                    id="transactionMessage"
+                    aria-live="polite"
+                ></p>
+
+
+
+                <!-- MODAL ACTIONS -->
+
+                <div class="modal-actions">
+
+                    <button
+                        type="button"
+                        class="cancel-btn"
+                        id="cancelModalBtn"
+                    >
+                        Cancel
+                    </button>
+
+
+                    <button
+                        type="submit"
+                        class="confirm-btn"
+                        id="confirmTransactionBtn"
+                    >
+                        Confirm Transaction
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+
+
+    <!-- =====================================================
+         DASHBOARD JAVASCRIPT
+    ====================================================== -->
+
+    <script src="js/dashboard.js"></script>
+
+</body>
+
+</html>
