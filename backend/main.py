@@ -4,6 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.routers import users
 from backend.routers import accounts
 from backend.routers import transactions
+from backend import beneficiaries
+from backend import upi
 
 
 app = FastAPI(
@@ -13,9 +15,9 @@ app = FastAPI(
 )
 
 
-# --------------------------------------------------
+# =========================================================
 # CORS
-# --------------------------------------------------
+# =========================================================
 
 app.add_middleware(
     CORSMiddleware,
@@ -26,18 +28,20 @@ app.add_middleware(
 )
 
 
-# --------------------------------------------------
-# Routers
-# --------------------------------------------------
+# =========================================================
+# ROUTERS
+# =========================================================
 
 app.include_router(users.router)
 app.include_router(accounts.router)
 app.include_router(transactions.router)
+app.include_router(beneficiaries.router)
+app.include_router(upi.router)
 
 
-# --------------------------------------------------
-# Root endpoint
-# --------------------------------------------------
+# =========================================================
+# ROOT
+# =========================================================
 
 @app.get("/")
 def root():
@@ -46,9 +50,9 @@ def root():
     }
 
 
-# --------------------------------------------------
-# Health check
-# --------------------------------------------------
+# =========================================================
+# HEALTH CHECK
+# =========================================================
 
 @app.get("/health")
 def health_check():

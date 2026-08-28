@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Create Account | DigitalBank</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #0f172a, #1d4ed8);
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 460px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 20px;
+            padding: 35px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+        }
+
+        .logo {
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        .logo h1 {
+            color: #2563eb;
+            font-size: 32px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #64748b;
+            margin-bottom: 28px;
+        }
+
+        .form-group {
+            margin-bottom: 18px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 7px;
+            font-weight: 600;
+            color: #334155;
+        }
+
+        input {
+            width: 100%;
+            padding: 13px 14px;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            font-size: 15px;
+            outline: none;
+            transition: 0.2s;
+        }
+
+        input:focus {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 10px;
+            background: #2563eb;
+            color: white;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+        button:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+        }
+
+        .message {
+            display: none;
+            margin-bottom: 18px;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .success {
+            display: block;
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .error {
+            display: block;
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .login-link {
+            text-align: center;
+            margin-top: 22px;
+            color: #64748b;
+        }
+
+        .login-link a {
+            color: #2563eb;
+            text-decoration: none;
+            font-weight: 700;
+        }
+
+        .login-link a:hover {
+            text-decoration: underline;
+        }
+
+        .password-note {
+            font-size: 12px;
+            color: #64748b;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <div class="card">
+
+        <div class="logo">
+            <h1>DigitalBank</h1>
+        </div>
+
+        <p class="subtitle">Create your banking account</p>
+
+        <div id="message" class="message"></div>
+
+        <form id="registerForm">
+
+            <div class="form-group">
+                <label for="fullName">Full Name</label>
+
+                <input
+                    type="text"
+                    id="fullName"
+                    name="full_name"
+                    placeholder="Enter your full name"
+                    required
+                    minlength="2"
+                    maxlength="100"
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="email">Email Address</label>
+
+                <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    placeholder="Enter your email"
+                    required
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="phone">Phone Number</label>
+
+                <input
+                    type="tel"
+                    id="phone"
+                    name="phone"
+                    placeholder="Enter your phone number"
+                    required
+                    minlength="10"
+                    maxlength="15"
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+
+                <input
+                    type="password"
+                    id="password"
+                    name="password"
+                    placeholder="Create a password"
+                    required
+                    minlength="8"
+                    maxlength="100"
+                >
+
+                <div class="password-note">
+                    Password must contain at least 8 characters.
+                </div>
+            </div>
+
+            <button type="submit" id="registerButton">
+                Create Account
+            </button>
+
+        </form>
+
+        <div class="login-link">
+            Already have an account?
+            <a href="index.html">Login</a>
+        </div>
+
+    </div>
+
+</div>
+
+
+<script>
+
+const API_URL = "http://127.0.0.1:8004";
+
+const registerForm = document.getElementById("registerForm");
+const registerButton = document.getElementById("registerButton");
+const messageBox = document.getElementById("message");
+
+
+function showMessage(message, type) {
+
+    messageBox.textContent = message;
+
+    messageBox.className = "message " + type;
+
+}
+
+
+registerForm.addEventListener("submit", async function(event) {
+
+    event.preventDefault();
+
+    messageBox.className = "message";
+    messageBox.textContent = "";
+
+    const fullName = document.getElementById("fullName").value.trim();
+    const email = document.getElementById("email").value.trim();
+    const phone = document.getElementById("phone").value.trim();
+    const password = document.getElementById("password").value;
+
+
+    if (fullName.length < 2) {
+
+        showMessage(
+            "Please enter your full name.",
+            "error"
+        );
+
+        return;
+    }
+
+
+    if (password.length < 8) {
+
+        showMessage(
+            "Password must contain at least 8 characters.",
+            "error"
+        );
+
+        return;
+    }
+
+
+    registerButton.disabled = true;
+    registerButton.textContent = "Creating Account...";
+
+
+    try {
+
+        const response = await fetch(
+            `${API_URL}/users/register`,
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type": "application/json"
+                },
+
+                body: JSON.stringify({
+                    full_name: fullName,
+                    email: email,
+                    phone: phone,
+                    password: password
+                })
+            }
+        );
+
+
+        const data = await response.json();
+
+
+        if (!response.ok) {
+
+            let errorMessage = "Registration failed.";
+
+            if (data.detail) {
+
+                if (typeof data.detail === "string") {
+                    errorMessage = data.detail;
+                } else {
+                    errorMessage = "Please check the information you entered.";
+                }
+
+            }
+
+            showMessage(errorMessage, "error");
+
+            return;
+        }
+
+
+        showMessage(
+            "Account created successfully! Redirecting to login...",
+            "success"
+        );
+
+
+        registerForm.reset();
+
+
+        setTimeout(function() {
+
+            window.location.href = "index.html";
+
+        }, 1500);
+
+
+    } catch (error) {
+
+        console.error("Registration error:", error);
+
+        showMessage(
+            "Unable to connect to the banking server. Please make sure the backend is running.",
+            "error"
+        );
+
+    } finally {
+
+        registerButton.disabled = false;
+        registerButton.textContent = "Create Account";
+
+    }
+
+});
+
+</script>
+
+</body>
+</html>

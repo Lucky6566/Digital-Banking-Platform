@@ -14,6 +14,8 @@ from ..schemas import (
     UserCreate,
     UserResponse,
     TokenResponse,
+    ForgotUsernameRequest,
+    ForgotPasswordRequest,
 )
 
 
@@ -22,6 +24,10 @@ router = APIRouter(
     tags=["Users"]
 )
 
+
+# --------------------------------------------------
+# REGISTER
+# --------------------------------------------------
 
 @router.post("/register")
 def register(
@@ -40,7 +46,9 @@ def register(
             detail="Email already registered"
         )
 
-    hashed_password = hash_password(user_data.password)
+    hashed_password = hash_password(
+        user_data.password
+    )
 
     user = User(
         full_name=user_data.full_name,
@@ -59,6 +67,10 @@ def register(
         "email": user.email
     }
 
+
+# --------------------------------------------------
+# LOGIN
+# --------------------------------------------------
 
 @router.post(
     "/login",
@@ -107,6 +119,10 @@ def login(
     }
 
 
+# --------------------------------------------------
+# GET CURRENT USER
+# --------------------------------------------------
+
 @router.get(
     "/me",
     response_model=UserResponse
@@ -115,3 +131,88 @@ def get_my_profile(
     current_user: User = Depends(get_current_user)
 ):
     return current_user
+
+
+# --------------------------------------------------
+# FORGOT USERNAME
+# --------------------------------------------------
+
+@router.post("/forgot-username")
+def forgot_username(
+    request: ForgotUsernameRequest,
+    db: Session = Depends(get_db)
+):
+    user = (
+        db.query(User)
+        .filter(User.phone == request.phone)
+        .first()
+    )
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account found with this phone number"
+        )
+
+    email = user.email
+
+    # Mask email for safer display
+    if "@" in email:
+        username, domain = email.split("@", 1)
+
+        if len(username) > 2:
+            masked_username = (
+                username[0]
+                + "*" * (len(username) - 2)
+                + username[-1]
+            )
+        else:
+            masked_username = "*" * len(username)
+
+        masked_email = (
+            masked_username
+            + "@"
+            + domain
+        )
+    else:
+        masked_email = "***"
+
+    return {
+        "message": "Account found",
+        "email": masked_email
+    }
+
+
+# --------------------------------------------------
+# FORGOT PASSWORD
+# --------------------------------------------------
+
+@router.post("/forgot-password")
+def forgot_password(
+    request: ForgotPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    user = (
+        db.query(User)
+        .filter(
+            User.email == request.email,
+            User.phone == request.phone
+        )
+        .first()
+    )
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Email and phone number do not match"
+        )
+
+    user.password_hash = hash_password(
+        request.new_password
+    )
+
+    db.commit()
+
+    return {
+        "message": "Password updated successfully"
+    }

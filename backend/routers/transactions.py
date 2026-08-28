@@ -196,9 +196,10 @@ def transaction_history(
 
     if transaction_type is not None:
         allowed_types = [
-            "Deposit",
-            "Withdrawal",
-            "Transfer"
+    "Deposit",
+    "Withdrawal",
+    "Transfer",
+    "UPI Payment"
         ]
 
         if transaction_type not in allowed_types:

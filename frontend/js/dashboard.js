@@ -1,278 +1,223 @@
-// =========================================================
-// DIGITAL BANKING PLATFORM
-// dashboard.js
-//
-// STEP 7.1 — AUTO REFRESH + LAST UPDATED
-// STEP 7.2 — BANKING NOTIFICATIONS
-// STEP 7.3-A — LIVE STATUS + LAST UPDATED
-// STEP 7.3-B — LIVE CONNECTION MONITORING
-// STEP 7.3-D — DASHBOARD / TRANSACTIONS NAVIGATION
-// =========================================================
+/* =========================================================
+   DIGITALBANK — DASHBOARD.JS
+   Complete frontend JavaScript
+   Compatible with the supplied dashboard.html
+========================================================= */
+
+"use strict";
 
 console.log("DigitalBank Dashboard JS loaded.");
 
-
-// =========================================================
-// API CONFIGURATION
-// =========================================================
+/* =========================================================
+   API CONFIGURATION
+========================================================= */
 
 const API_URL = "http://127.0.0.1:8004";
 
-
-// =========================================================
-// AUTHENTICATION
-// =========================================================
-
-function getToken() {
-    return localStorage.getItem("access_token");
-}
-
-if (!getToken()) {
-    window.location.replace("index.html");
-}
-
-
-// =========================================================
-// GLOBAL VARIABLES
-// =========================================================
-
-let allTransactions = [];
-let currentTransactionType = null;
+let currentUser = null;
 let currentAccount = null;
-let currentSummary = null;
-
-let dashboardLastUpdated = null;
-
-let dashboardRefreshInterval = null;
-let dashboardIsRefreshing = false;
-
-let connectionMonitorInterval = null;
-
-let notificationTimeout = null;
+let transactions = [];
+let beneficiaries = [];
+let currentTransactionType = null;
+let notificationTimer = null;
 
 
-// =========================================================
-// DOM HELPER
-// =========================================================
+/* =========================================================
+   DOM HELPER
+========================================================= */
 
-function getElement(id) {
+function $(id) {
     return document.getElementById(id);
 }
 
 
-// =========================================================
-// MONEY FORMATTER
-// =========================================================
+/* =========================================================
+   SAFE TEXT UPDATE
+========================================================= */
 
-function formatMoney(amount) {
+function setText(id, value) {
+    const element = $(id);
 
-    const value = Number(amount);
+    if (element) {
+        element.textContent = value;
+    }
+}
 
-    if (!Number.isFinite(value)) {
+
+/* =========================================================
+   FORMATTERS
+========================================================= */
+
+function formatCurrency(value) {
+    const amount = Number(value);
+
+    if (!Number.isFinite(amount)) {
         return "₹0.00";
     }
 
-    return `₹${value.toLocaleString("en-IN", {
+    return amount.toLocaleString("en-IN", {
+        style: "currency",
+        currency: "INR",
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
-    })}`;
+    });
 }
 
 
-// =========================================================
-// ERROR MESSAGE
-// =========================================================
-
-function getErrorMessage(data) {
-
-    if (!data) {
-        return "Request failed.";
+function formatDate(value) {
+    if (!value) {
+        return "--";
     }
 
-    if (typeof data.detail === "string") {
-        return data.detail;
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+        return String(value);
     }
 
-    if (Array.isArray(data.detail)) {
-
-        return data.detail
-            .map(item => {
-
-                if (item && item.msg) {
-                    return item.msg;
-                }
-
-                if (typeof item === "string") {
-                    return item;
-                }
-
-                return JSON.stringify(item);
-            })
-            .join(", ");
-    }
-
-    if (typeof data.message === "string") {
-        return data.message;
-    }
-
-    if (typeof data.error === "string") {
-        return data.error;
-    }
-
-    if (typeof data === "string") {
-        return data;
-    }
-
-    return "Request failed.";
+    return date.toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric"
+    });
 }
 
 
-// =========================================================
-// API REQUEST
-// =========================================================
+function formatDateTime(value) {
+    if (!value) {
+        return "--";
+    }
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+        return String(value);
+    }
+
+    return date.toLocaleString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+    });
+}
+
+
+/* =========================================================
+   AUTH TOKEN
+========================================================= */
+
+function getToken() {
+    return (
+        localStorage.getItem("access_token") ||
+        localStorage.getItem("token") ||
+        sessionStorage.getItem("access_token") ||
+        sessionStorage.getItem("token") ||
+        ""
+    );
+}
+
+
+/* =========================================================
+   API REQUEST
+========================================================= */
 
 async function apiRequest(endpoint, options = {}) {
 
-    const currentToken = getToken();
+    const token = getToken();
 
-    if (!currentToken) {
-
-        window.location.replace("index.html");
-
-        throw new Error(
-            "Authentication token not found."
-        );
-    }
-
-
-    const requestOptions = {
-
-        method: options.method || "GET",
-
-        ...options,
-
-        headers: {
-
-            "Authorization":
-                `Bearer ${currentToken}`,
-
-            "Content-Type":
-                "application/json",
-
-            ...(options.headers || {})
-        }
+    const headers = {
+        Accept: "application/json",
+        ...(options.headers || {})
     };
 
+    if (options.body && !(options.body instanceof FormData)) {
+        headers["Content-Type"] = "application/json";
+    }
 
-    console.log(
-        `${requestOptions.method} ${API_URL}${endpoint}`
-    );
+    if (token) {
+        headers.Authorization = `Bearer ${token}`;
+    }
 
+    const url = endpoint.startsWith("http")
+        ? endpoint
+        : `${API_URL}${endpoint}`;
+
+    console.log("API Request:", url);
 
     try {
 
-        const response =
-            await fetch(
-                `${API_URL}${endpoint}`,
-                requestOptions
-            );
-
+        const response = await fetch(url, {
+            ...options,
+            headers
+        });
 
         let data = null;
 
-
         const contentType =
-            response.headers.get(
-                "content-type"
-            ) || "";
+            response.headers.get("content-type") || "";
 
-
-        if (
-            contentType.includes(
-                "application/json"
-            )
-        ) {
-
-            try {
-
-                data =
-                    await response.json();
-
-            } catch {
-
-                data = null;
-            }
-
+        if (contentType.includes("application/json")) {
+            data = await response.json();
         } else {
-
-            try {
-
-                const text =
-                    await response.text();
-
-                data =
-                    text || null;
-
-            } catch {
-
-                data = null;
-            }
+            const text = await response.text();
+            data = text ? text : null;
         }
 
-
-        // =================================================
-        // AUTH ERROR
-        // =================================================
+        console.log(
+            "API Response:",
+            response.status,
+            data
+        );
 
         if (response.status === 401) {
-
-            console.error(
-                "Authentication expired."
+            showNotification(
+                "error",
+                "Session Expired",
+                "Please login again."
             );
 
+            setTimeout(() => {
+                localStorage.removeItem("access_token");
+                localStorage.removeItem("token");
+                sessionStorage.removeItem("access_token");
+                sessionStorage.removeItem("token");
 
-            localStorage.removeItem(
-                "access_token"
-            );
+                window.location.href = "login.html";
+            }, 1200);
 
-
-            window.location.replace(
-                "index.html"
-            );
-
-
-            throw new Error(
-                "Session expired. Please login again."
-            );
+            throw new Error("Unauthorized");
         }
-
-
-        // =================================================
-        // OTHER API ERRORS
-        // =================================================
 
         if (!response.ok) {
 
-            console.error(
-                "API Error:",
-                response.status,
-                data
-            );
+            let message = "Request failed.";
 
+            if (data) {
 
-            throw new Error(
-                getErrorMessage(data) ||
-                `Request failed with status ${response.status}.`
-            );
+                if (typeof data === "string") {
+                    message = data;
+                } else if (data.detail) {
+                    message =
+                        typeof data.detail === "string"
+                            ? data.detail
+                            : JSON.stringify(data.detail);
+                } else if (data.message) {
+                    message = data.message;
+                }
+            }
+
+            throw new Error(message);
         }
-
 
         return data;
 
     } catch (error) {
 
         console.error(
-            "API request error:",
+            "API Error:",
+            endpoint,
             error
         );
 
@@ -281,156 +226,150 @@ async function apiRequest(endpoint, options = {}) {
 }
 
 
-// =========================================================
-// STEP 7.3-A
-// UPDATE LAST UPDATED
-// =========================================================
+/* =========================================================
+   NOTIFICATION
+========================================================= */
 
-function updateLastUpdated() {
+function showNotification(
+    type,
+    title,
+    message
+) {
 
-    const element =
-        getElement("lastUpdated");
+    const notification = $("bankingNotification");
+    const notificationTitle = $("notificationTitle");
+    const notificationMessage = $("notificationMessage");
+    const notificationIcon = $("notificationIcon");
 
-    if (!element) {
+    if (!notification) {
         return;
     }
 
+    if (notificationTitle) {
+        notificationTitle.textContent = title || "Notification";
+    }
 
-    dashboardLastUpdated =
-        new Date();
+    if (notificationMessage) {
+        notificationMessage.textContent =
+            message || "";
+    }
 
+    if (notificationIcon) {
+        notificationIcon.textContent =
+            type === "error"
+                ? "!"
+                : type === "warning"
+                    ? "!"
+                    : "✓";
+    }
 
-    element.textContent =
-        dashboardLastUpdated.toLocaleTimeString(
-            "en-IN",
-            {
-                hour: "2-digit",
-                minute: "2-digit",
-                second: "2-digit"
-            }
-        );
+    notification.classList.remove(
+        "success",
+        "error",
+        "warning",
+        "show"
+    );
+
+    notification.classList.add(
+        type || "success"
+    );
+
+    requestAnimationFrame(() => {
+        notification.classList.add("show");
+    });
+
+    clearTimeout(notificationTimer);
+
+    notificationTimer = setTimeout(() => {
+        notification.classList.remove("show");
+    }, 4500);
 }
 
 
-// =========================================================
-// STEP 7.3-A
-// LIVE / OFFLINE STATUS
-// =========================================================
+function closeNotification() {
 
-function setDashboardLiveStatus(isLive) {
+    const notification = $("bankingNotification");
 
-    const statusText =
-        getElement("liveStatusText");
+    if (notification) {
+        notification.classList.remove("show");
+    }
+}
 
-    const statusDot =
-        document.querySelector(
-            ".live-status-dot"
-        );
 
+/* =========================================================
+   LIVE STATUS
+========================================================= */
+
+function setLiveStatus(online, text) {
+
+    const dot = $("liveStatusDot");
+    const statusText = $("liveStatusText");
+
+    if (dot) {
+        dot.classList.toggle("offline", !online);
+    }
 
     if (statusText) {
-
         statusText.textContent =
-            isLive ? "Live" : "Offline";
-    }
-
-
-    if (statusDot) {
-
-        statusDot.classList.toggle(
-            "offline",
-            !isLive
-        );
+            text || (online ? "Connected" : "Offline");
     }
 }
 
 
-// =========================================================
-// LOAD PROFILE
-// =========================================================
+function updateLastUpdated() {
+
+    setText(
+        "lastUpdated",
+        new Date().toLocaleTimeString("en-IN", {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit"
+        })
+    );
+}
+
+
+/* =========================================================
+   LOAD PROFILE
+========================================================= */
 
 async function loadProfile() {
 
     try {
 
-        const user =
-            await apiRequest(
-                "/users/me"
-            );
+        currentUser =
+            await apiRequest("/users/me");
 
+        const name =
+            currentUser?.full_name ||
+            currentUser?.name ||
+            "Customer";
 
-        console.log(
-            "Profile loaded:",
-            user
+        const email =
+            currentUser?.email ||
+            "--";
+
+        setText(
+            "profileName",
+            name
         );
 
+        setText(
+            "profileEmail",
+            email
+        );
 
-        const welcomeMessage =
-            getElement(
-                "welcomeMessage"
-            );
+        setText(
+            "accountHolder",
+            name
+        );
 
+        setText(
+            "welcomeMessage",
+            `Welcome back, ${name}!`
+        );
 
-        if (welcomeMessage) {
-
-            welcomeMessage.textContent =
-                `Welcome back, ${user.full_name || "User"}!`;
-        }
-
-
-        const profileName =
-            getElement(
-                "profileName"
-            );
-
-
-        if (profileName) {
-
-            profileName.textContent =
-                user.full_name || "User";
-        }
-
-
-        const profileEmail =
-            getElement(
-                "profileEmail"
-            );
-
-
-        if (profileEmail) {
-
-            profileEmail.textContent =
-                user.email || "";
-        }
-
-
-        const userName =
-            getElement(
-                "userName"
-            );
-
-
-        if (userName) {
-
-            userName.textContent =
-                user.full_name || "User";
-        }
-
-
-        const userEmail =
-            getElement(
-                "userEmail"
-            );
-
-
-        if (userEmail) {
-
-            userEmail.textContent =
-                user.email || "";
-        }
-
-
-        return user;
+        return currentUser;
 
     } catch (error) {
 
@@ -439,156 +378,19 @@ async function loadProfile() {
             error
         );
 
-        return null;
-    }
-}
-
-
-// =========================================================
-// ACCOUNT NUMBER
-// =========================================================
-
-function setAccountNumber(accountNumber) {
-
-    const element =
-        getElement(
-            "accountNumber"
+        setText(
+            "profileName",
+            "Customer"
         );
 
-
-    if (!element) {
-        return;
-    }
-
-
-    if (
-        accountNumber !== undefined &&
-        accountNumber !== null &&
-        String(accountNumber).trim() !== ""
-    ) {
-
-        element.textContent =
-            String(accountNumber);
-
-        element.style.display =
-            "block";
-
-        element.style.visibility =
-            "visible";
-
-        element.style.opacity =
-            "1";
-
-
-        console.log(
-            "Account number displayed:",
-            accountNumber
-        );
-    }
-}
-
-
-// =========================================================
-// LOAD ACCOUNT SUMMARY
-// =========================================================
-
-async function loadSummary() {
-
-    try {
-
-        const data =
-            await apiRequest(
-                "/accounts/summary"
-            );
-
-
-        currentSummary =
-            data;
-
-
-        console.log(
-            "Account summary:",
-            data
+        setText(
+            "profileEmail",
+            "--"
         );
 
-
-        const accountNumber =
-            data?.account_number ||
-            data?.accountNumber ||
-            data?.account?.account_number ||
-            data?.account?.accountNumber;
-
-
-        if (accountNumber) {
-
-            setAccountNumber(
-                accountNumber
-            );
-        }
-
-
-        const balance =
-            getElement("balance");
-
-
-        if (
-            balance &&
-            data?.balance !== undefined
-        ) {
-
-            balance.textContent =
-                formatMoney(
-                    data.balance
-                );
-        }
-
-
-        const totalDeposits =
-            getElement("totalDeposits");
-
-
-        if (totalDeposits) {
-
-            totalDeposits.textContent =
-                formatMoney(
-                    data?.total_deposits ?? 0
-                );
-        }
-
-
-        const totalWithdrawals =
-            getElement("totalWithdrawals");
-
-
-        if (totalWithdrawals) {
-
-            totalWithdrawals.textContent =
-                formatMoney(
-                    data?.total_withdrawals ?? 0
-                );
-        }
-
-
-        const totalTransfers =
-            getElement("totalTransfers");
-
-
-        if (totalTransfers) {
-
-            totalTransfers.textContent =
-                formatMoney(
-                    data?.total_transfers ?? 0
-                );
-        }
-
-
-        return data;
-
-    } catch (error) {
-
-        console.error(
-            "Summary loading failed:",
-            error
+        setText(
+            "accountHolder",
+            "Customer"
         );
 
         return null;
@@ -596,75 +398,56 @@ async function loadSummary() {
 }
 
 
-// =========================================================
-// LOAD ACCOUNT
-// =========================================================
+/* =========================================================
+   LOAD ACCOUNT
+========================================================= */
 
 async function loadAccount() {
 
     try {
 
-        const account =
-            await apiRequest(
-                "/accounts/"
-            );
-
-
         currentAccount =
-            account;
-
-
-        console.log(
-            "Account loaded:",
-            account
-        );
-
+            await apiRequest("/accounts/me");
 
         const accountNumber =
-            account?.account_number ||
-            account?.accountNumber;
-
-
-        if (accountNumber) {
-
-            setAccountNumber(
-                accountNumber
-            );
-        }
-
+            currentAccount?.account_number ||
+            currentAccount?.accountNumber ||
+            "--";
 
         const accountType =
-            getElement(
-                "accountType"
-            );
-
-
-        if (accountType) {
-
-            accountType.textContent =
-                account?.account_type ||
-                account?.accountType ||
-                "Savings";
-        }
-
+            currentAccount?.account_type ||
+            currentAccount?.accountType ||
+            "Savings";
 
         const balance =
-            getElement("balance");
+            Number(currentAccount?.balance || 0);
 
+        setText(
+            "balanceValue",
+            formatCurrency(balance)
+        );
 
-        if (
-            balance &&
-            account?.balance !== undefined
-        ) {
+        setText(
+            "accountNumberDisplay",
+            accountNumber
+        );
 
-            balance.textContent =
-                formatMoney(
-                    account.balance
-                );
-        }
+        setText(
+            "accountNumber",
+            accountNumber
+        );
 
+        setText(
+            "accountType",
+            accountType
+        );
 
-        return account;
+        setText(
+            "accountBalance",
+            formatCurrency(balance)
+        );
+
+        return currentAccount;
 
     } catch (error) {
 
@@ -673,1243 +456,1383 @@ async function loadAccount() {
             error
         );
 
+        setText(
+            "balanceValue",
+            "₹0.00"
+        );
 
-        const accountType =
-            getElement(
-                "accountType"
-            );
-
-
-        if (accountType) {
-
-            accountType.textContent =
-                "Savings";
-        }
-
+        setText(
+            "accountBalance",
+            "₹0.00"
+        );
 
         return null;
     }
 }
 
 
-// =========================================================
-// LOAD TRANSACTIONS
-// =========================================================
+/* =========================================================
+   LOAD TRANSACTIONS
+========================================================= */
 
-async function loadTransactions(
-    showLoading = true
-) {
+async function loadTransactions() {
 
     const container =
-        getElement(
-            "transactionsContainer"
-        );
+        $("transactionsContainer");
 
-
-    if (
-        container &&
-        showLoading
-    ) {
-
-        container.innerHTML =
-            "<p class='loading'>Loading transactions...</p>";
-    }
-
+    const miniBody =
+        $("miniStatementBody");
 
     try {
 
-        const transactions =
+        const data =
             await apiRequest(
-                "/transactions/recent"
+                "/transactions/history?skip=0&limit=100"
             );
 
-
-        allTransactions =
-            Array.isArray(
-                transactions
-            )
-                ? transactions
-                : [];
-
-
-        console.log(
-            "Transactions loaded:",
-            allTransactions
-        );
-
+        if (Array.isArray(data)) {
+            transactions = data;
+        } else if (Array.isArray(data?.transactions)) {
+            transactions = data.transactions;
+        } else if (Array.isArray(data?.items)) {
+            transactions = data.items;
+        } else {
+            transactions = [];
+        }
 
         renderTransactions();
-
-        updateTransactionAnalytics();
-
-        updateTransactionVisualization();
-
+        renderMiniStatement();
+        updateAnalytics();
         updateFinancialHealth();
 
-
-        setDashboardLiveStatus(true);
-
-
-        return allTransactions;
+        return transactions;
 
     } catch (error) {
 
         console.error(
-            "Transactions loading failed:",
+            "Transaction loading failed:",
             error
         );
 
+        transactions = [];
 
         if (container) {
-
-            container.innerHTML =
-                "<p class='loading'>Unable to load transactions.</p>";
+            container.innerHTML = `
+                <p class="empty-state">
+                    Unable to load transactions.
+                </p>
+            `;
         }
 
-
-        setDashboardLiveStatus(false);
-
+        if (miniBody) {
+            miniBody.innerHTML = `
+                <tr>
+                    <td colspan="5" class="empty-state">
+                        Unable to load transactions.
+                    </td>
+                </tr>
+            `;
+        }
 
         return [];
     }
 }
 
 
-// =========================================================
-// RENDER TRANSACTIONS
-// =========================================================
+/* =========================================================
+   TRANSACTION NORMALIZER
+========================================================= */
+
+function normalizeTransaction(transaction) {
+
+    const rawType =
+        transaction?.transaction_type ||
+        transaction?.type ||
+        transaction?.transactionType ||
+        transaction?.category ||
+        "";
+
+    const type =
+        String(rawType)
+            .toLowerCase()
+            .trim();
+
+    const amount =
+        Number(
+            transaction?.amount ||
+            transaction?.value ||
+            0
+        );
+
+    const description =
+        transaction?.description ||
+        transaction?.remarks ||
+        transaction?.note ||
+        transaction?.purpose ||
+        getTransactionLabel(type);
+
+    const date =
+        transaction?.created_at ||
+        transaction?.createdAt ||
+        transaction?.transaction_date ||
+        transaction?.date ||
+        transaction?.timestamp ||
+        null;
+
+    const status =
+        transaction?.status ||
+        "Completed";
+
+    return {
+        ...transaction,
+        normalizedType: type,
+        normalizedAmount: Number.isFinite(amount)
+            ? amount
+            : 0,
+        normalizedDescription: description,
+        normalizedDate: date,
+        normalizedStatus: status
+    };
+}
+
+
+/* =========================================================
+   TYPE HELPERS
+========================================================= */
+
+function getTransactionLabel(type) {
+
+    const value =
+        String(type || "").toLowerCase();
+
+    if (value.includes("deposit")) {
+        return "Cash Deposit";
+    }
+
+    if (
+        value.includes("withdraw") ||
+        value.includes("withdrawal")
+    ) {
+        return "Cash Withdrawal";
+    }
+
+    if (
+        value.includes("upi") ||
+        value.includes("payment")
+    ) {
+        return "UPI Payment";
+    }
+
+    if (
+        value.includes("transfer") ||
+        value.includes("send")
+    ) {
+        return "Account Transfer";
+    }
+
+    return "Banking Transaction";
+}
+
+
+function getTransactionClass(type) {
+
+    const value =
+        String(type || "").toLowerCase();
+
+    if (value.includes("deposit")) {
+        return "deposit";
+    }
+
+    if (
+        value.includes("withdraw") ||
+        value.includes("withdrawal")
+    ) {
+        return "withdrawal";
+    }
+
+    if (
+        value.includes("upi") ||
+        value.includes("payment")
+    ) {
+        return "upi";
+    }
+
+    if (
+        value.includes("transfer") ||
+        value.includes("send")
+    ) {
+        return "transfer";
+    }
+
+    return "transfer";
+}
+
+
+/* =========================================================
+   RENDER MINI STATEMENT
+========================================================= */
+
+function renderMiniStatement() {
+
+    const body =
+        $("miniStatementBody");
+
+    if (!body) {
+        return;
+    }
+
+    const recent =
+        transactions
+            .map(normalizeTransaction)
+            .sort(
+                (a, b) =>
+                    new Date(b.normalizedDate || 0) -
+                    new Date(a.normalizedDate || 0)
+            )
+            .slice(0, 5);
+
+    if (recent.length === 0) {
+
+        body.innerHTML = `
+            <tr>
+                <td colspan="5" class="empty-state">
+                    No transactions found.
+                </td>
+            </tr>
+        `;
+
+        return;
+    }
+
+    body.innerHTML =
+        recent.map(transaction => {
+
+            const typeClass =
+                getTransactionClass(
+                    transaction.normalizedType
+                );
+
+            const sign =
+                transaction.normalizedType.includes("deposit")
+                    ? "+"
+                    : "-";
+
+            return `
+                <tr>
+                    <td>
+                        ${escapeHTML(
+                            formatDate(
+                                transaction.normalizedDate
+                            )
+                        )}
+                    </td>
+
+                    <td>
+                        ${escapeHTML(
+                            transaction.normalizedDescription
+                        )}
+                    </td>
+
+                    <td>
+                        <span class="transaction-type ${typeClass}">
+                            ${escapeHTML(
+                                getTransactionLabel(
+                                    transaction.normalizedType
+                                )
+                            )}
+                        </span>
+                    </td>
+
+                    <td>
+                        ${sign}${formatCurrency(
+                            transaction.normalizedAmount
+                        )}
+                    </td>
+
+                    <td>
+                        <span class="transaction-status">
+                            ${escapeHTML(
+                                transaction.normalizedStatus
+                            )}
+                        </span>
+                    </td>
+                </tr>
+            `;
+
+        }).join("");
+}
+
+
+/* =========================================================
+   RENDER TRANSACTIONS
+========================================================= */
 
 function renderTransactions() {
 
     const container =
-        getElement(
-            "transactionsContainer"
-        );
-
+        $("transactionsContainer");
 
     if (!container) {
         return;
     }
 
+    const searchInput =
+        $("transactionSearch");
 
-    const searchValue =
-        getElement(
-            "transactionSearch"
+    const filterSelect =
+        $("transactionFilter");
+
+    const search =
+        String(
+            searchInput?.value || ""
         )
-        ?.value
-        ?.trim()
-        .toLowerCase() || "";
+            .toLowerCase()
+            .trim();
 
-
-    const filterValue =
-        getElement(
-            "transactionFilter"
+    const filter =
+        String(
+            filterSelect?.value || "all"
         )
-        ?.value || "all";
+            .toLowerCase();
 
+    let filtered =
+        transactions
+            .map(normalizeTransaction)
+            .filter(transaction => {
 
-    const filteredTransactions =
-        allTransactions.filter(
-            transaction => {
+                const searchable = [
+                    transaction.normalizedDescription,
+                    transaction.normalizedType,
+                    transaction.normalizedStatus,
+                    transaction.account_number,
+                    transaction.reference_number
+                ]
+                    .filter(Boolean)
+                    .join(" ")
+                    .toLowerCase();
 
-                const type =
-                    String(
-                        transaction?.transaction_type || ""
-                    );
+                const matchesSearch =
+                    !search ||
+                    searchable.includes(search);
 
+                let matchesFilter = true;
 
-                const reference =
-                    String(
-                        transaction?.reference || ""
-                    ).toLowerCase();
+                if (filter !== "all") {
 
+                    const type =
+                        transaction.normalizedType;
 
-                const amount =
-                    String(
-                        transaction?.amount ?? ""
-                    );
+                    if (filter === "deposit") {
+                        matchesFilter =
+                            type.includes("deposit");
+                    }
 
+                    else if (filter === "withdrawal") {
+                        matchesFilter =
+                            type.includes("withdraw") ||
+                            type.includes("withdrawal");
+                    }
 
-                const status =
-                    String(
-                        transaction?.status || ""
-                    ).toLowerCase();
+                    else if (filter === "transfer") {
+                        matchesFilter =
+                            type.includes("transfer") ||
+                            type.includes("send");
+                    }
 
-
-                const searchMatch =
-                    !searchValue ||
-                    type.toLowerCase()
-                        .includes(searchValue) ||
-                    reference.includes(searchValue) ||
-                    amount.includes(searchValue) ||
-                    status.includes(searchValue);
-
-
-                const filterMatch =
-                    filterValue === "all" ||
-                    type.toLowerCase() ===
-                    filterValue.toLowerCase();
-
+                    else if (filter === "upi payment") {
+                        matchesFilter =
+                            type.includes("upi") ||
+                            type.includes("payment");
+                    }
+                }
 
                 return (
-                    searchMatch &&
-                    filterMatch
+                    matchesSearch &&
+                    matchesFilter
                 );
-            }
-        );
+            });
 
+    filtered.sort(
+        (a, b) =>
+            new Date(b.normalizedDate || 0) -
+            new Date(a.normalizedDate || 0)
+    );
 
-    if (
-        filteredTransactions.length ===
-        0
-    ) {
+    if (filtered.length === 0) {
 
-        container.innerHTML =
-            "<p class='loading'>No matching transactions found.</p>";
+        container.innerHTML = `
+            <div class="empty-state-block">
+                <div class="empty-state-icon">⌕</div>
+                <strong>No transactions found.</strong>
+                <span>Try another search or filter.</span>
+            </div>
+        `;
 
         return;
     }
 
+    container.innerHTML =
+        filtered.map(transaction => {
 
-    container.innerHTML = "";
-
-
-    filteredTransactions.forEach(
-        transaction => {
-
-            const row =
-                document.createElement(
-                    "div"
+            const typeClass =
+                getTransactionClass(
+                    transaction.normalizedType
                 );
 
+            const isDeposit =
+                transaction.normalizedType
+                    .includes("deposit");
 
-            row.className =
-                "transaction-row";
+            const sign =
+                isDeposit ? "+" : "-";
 
+            return `
+                <div class="transaction-row">
 
-            const transactionType =
-                transaction?.transaction_type ||
-                "Transaction";
+                    <div class="transaction-main">
 
+                        <div class="transaction-icon ${typeClass}">
+                            ${getTransactionIcon(
+                                transaction.normalizedType
+                            )}
+                        </div>
 
-            const createdAt =
-                transaction?.created_at
-                    ? new Date(
-                        transaction.created_at
-                    ).toLocaleString("en-IN")
-                    : "Date unavailable";
+                        <div class="transaction-info">
 
+                            <strong>
+                                ${escapeHTML(
+                                    transaction.normalizedDescription
+                                )}
+                            </strong>
 
-            const reference =
-                transaction?.reference ||
-                "N/A";
+                            <span>
+                                ${escapeHTML(
+                                    formatDateTime(
+                                        transaction.normalizedDate
+                                    )
+                                )}
+                            </span>
 
+                        </div>
 
-            const status =
-                transaction?.status ||
-                "Unknown";
+                    </div>
 
+                    <div class="transaction-type">
+                        ${escapeHTML(
+                            getTransactionLabel(
+                                transaction.normalizedType
+                            )
+                        )}
+                    </div>
 
-            const amount =
-                Number(
-                    transaction?.amount || 0
-                );
+                    <div class="transaction-amount ${typeClass}">
+                        ${sign}${formatCurrency(
+                            transaction.normalizedAmount
+                        )}
+                    </div>
 
+                    <div class="transaction-status">
+                        ${escapeHTML(
+                            transaction.normalizedStatus
+                        )}
+                    </div>
 
-            const left =
-                document.createElement(
-                    "div"
-                );
+                </div>
+            `;
 
-
-            const title =
-                document.createElement(
-                    "h3"
-                );
-
-
-            title.textContent =
-                transactionType;
-
-
-            const date =
-                document.createElement(
-                    "p"
-                );
-
-
-            date.textContent =
-                createdAt;
-
-
-            const ref =
-                document.createElement(
-                    "p"
-                );
-
-
-            ref.textContent =
-                `Reference: ${reference}`;
-
-
-            left.appendChild(title);
-            left.appendChild(date);
-            left.appendChild(ref);
-
-
-            const right =
-                document.createElement(
-                    "div"
-                );
-
-
-            const amountElement =
-                document.createElement(
-                    "strong"
-                );
-
-
-            amountElement.textContent =
-                formatMoney(amount);
-
-
-            const statusElement =
-                document.createElement(
-                    "p"
-                );
-
-
-            statusElement.textContent =
-                status;
-
-
-            const normalizedStatus =
-                String(status)
-                    .toLowerCase();
-
-
-            if (
-                normalizedStatus === "completed" ||
-                normalizedStatus === "success" ||
-                normalizedStatus === "successful"
-            ) {
-
-                statusElement.classList.add(
-                    "transaction-status-success"
-                );
-
-            } else if (
-                normalizedStatus === "pending" ||
-                normalizedStatus === "processing"
-            ) {
-
-                statusElement.classList.add(
-                    "transaction-status-pending"
-                );
-
-            } else if (
-                normalizedStatus === "failed" ||
-                normalizedStatus === "rejected"
-            ) {
-
-                statusElement.classList.add(
-                    "transaction-status-failed"
-                );
-            }
-
-
-            right.appendChild(
-                amountElement
-            );
-
-            right.appendChild(
-                statusElement
-            );
-
-
-            row.appendChild(left);
-
-            row.appendChild(right);
-
-
-            container.appendChild(row);
-        }
-    );
+        }).join("");
 }
 
 
-// =========================================================
-// TRANSACTION ANALYTICS
-// =========================================================
+function getTransactionIcon(type) {
 
-function calculateTransactionAnalytics() {
+    const value =
+        String(type || "").toLowerCase();
 
-    let deposits = 0;
-    let withdrawals = 0;
-    let transfers = 0;
+    if (value.includes("deposit")) {
+        return "↓";
+    }
 
-    let moneyIn = 0;
-    let moneyOut = 0;
+    if (
+        value.includes("withdraw") ||
+        value.includes("withdrawal")
+    ) {
+        return "↑";
+    }
 
+    if (
+        value.includes("upi") ||
+        value.includes("payment")
+    ) {
+        return "₹";
+    }
 
-    allTransactions.forEach(
-        transaction => {
-
-            const type =
-                String(
-                    transaction?.transaction_type || ""
-                ).toLowerCase();
-
-
-            const amount =
-                Number(
-                    transaction?.amount || 0
-                );
+    return "↔";
+}
 
 
-            if (type === "deposit") {
+/* =========================================================
+   ANALYTICS
+========================================================= */
 
-                deposits++;
-                moneyIn += amount;
+function updateAnalytics() {
 
-            } else if (
-                type === "withdraw" ||
-                type === "withdrawal"
-            ) {
+    const normalized =
+        transactions.map(normalizeTransaction);
 
-                withdrawals++;
-                moneyOut += amount;
+    let depositTotal = 0;
+    let withdrawalTotal = 0;
+    let transferTotal = 0;
+    let upiTotal = 0;
 
-            } else if (type === "transfer") {
+    let depositCount = 0;
+    let withdrawalCount = 0;
+    let transferCount = 0;
+    let upiCount = 0;
 
-                transfers++;
-                moneyOut += amount;
-            }
+    normalized.forEach(transaction => {
+
+        const type =
+            transaction.normalizedType;
+
+        const amount =
+            transaction.normalizedAmount;
+
+        if (type.includes("deposit")) {
+
+            depositTotal += amount;
+            depositCount++;
+
+        } else if (
+            type.includes("withdraw") ||
+            type.includes("withdrawal")
+        ) {
+
+            withdrawalTotal += amount;
+            withdrawalCount++;
+
+        } else if (
+            type.includes("upi") ||
+            type.includes("payment")
+        ) {
+
+            upiTotal += amount;
+            upiCount++;
+
+        } else if (
+            type.includes("transfer") ||
+            type.includes("send")
+        ) {
+
+            transferTotal += amount;
+            transferCount++;
         }
+    });
+
+    setText(
+        "depositValue",
+        formatCurrency(depositTotal)
     );
 
+    setText(
+        "withdrawalValue",
+        formatCurrency(withdrawalTotal)
+    );
 
-    const totalTransactions =
-        allTransactions.length;
+    setText(
+        "transferValue",
+        formatCurrency(
+            transferTotal + upiTotal
+        )
+    );
 
+    setText(
+        "chartDepositCount",
+        depositCount
+    );
+
+    setText(
+        "chartWithdrawalCount",
+        withdrawalCount
+    );
+
+    setText(
+        "chartTransferCount",
+        transferCount
+    );
+
+    setText(
+        "chartUPICount",
+        upiCount
+    );
+
+    const moneyIn =
+        depositTotal;
+
+    const moneyOut =
+        withdrawalTotal +
+        transferTotal +
+        upiTotal;
 
     const netFlow =
         moneyIn - moneyOut;
 
+    setText(
+        "chartMoneyIn",
+        formatCurrency(moneyIn)
+    );
 
-    const averageTransaction =
-        totalTransactions > 0
-            ? (
-                moneyIn +
-                moneyOut
-            ) / totalTransactions
+    setText(
+        "chartMoneyOut",
+        formatCurrency(moneyOut)
+    );
+
+    setText(
+        "chartNetFlow",
+        formatCurrency(netFlow)
+    );
+
+    updateBar(
+        "chartDepositBar",
+        depositCount,
+        normalized.length
+    );
+
+    updateBar(
+        "chartWithdrawalBar",
+        withdrawalCount,
+        normalized.length
+    );
+
+    updateBar(
+        "chartTransferBar",
+        transferCount,
+        normalized.length
+    );
+
+    updateBar(
+        "chartUPIBar",
+        upiCount,
+        normalized.length
+    );
+}
+
+
+function updateBar(id, count, total) {
+
+    const bar = $(id);
+
+    if (!bar) {
+        return;
+    }
+
+    const percentage =
+        total > 0
+            ? Math.max(
+                3,
+                Math.min(
+                    100,
+                    (count / total) * 100
+                )
+            )
             : 0;
 
-
-    return {
-
-        totalTransactions,
-        deposits,
-        withdrawals,
-        transfers,
-        moneyIn,
-        moneyOut,
-        netFlow,
-        averageTransaction
-    };
+    bar.style.width =
+        `${percentage}%`;
 }
 
 
-// =========================================================
-// UPDATE TRANSACTION ANALYTICS
-// =========================================================
+/* =========================================================
+   FINANCIAL HEALTH
+   Created automatically because the supplied HTML
+   does not contain a Financial Health section.
+========================================================= */
 
-function updateTransactionAnalytics() {
+function createFinancialHealthSection() {
 
-    const analytics =
-        calculateTransactionAnalytics();
-
-
-    const elements = {
-
-        analyticsTotalTransactions:
-            analytics.totalTransactions,
-
-        analyticsCredits:
-            formatMoney(
-                analytics.moneyIn
-            ),
-
-        analyticsDebits:
-            formatMoney(
-                analytics.moneyOut
-            ),
-
-        analyticsAverage:
-            formatMoney(
-                analytics.averageTransaction
-            ),
-
-        analyticsDeposits:
-            analytics.deposits,
-
-        analyticsWithdrawals:
-            analytics.withdrawals,
-
-        analyticsTransfers:
-            analytics.transfers,
-
-        analyticsMoneyIn:
-            formatMoney(
-                analytics.moneyIn
-            ),
-
-        analyticsMoneyOut:
-            formatMoney(
-                analytics.moneyOut
-            ),
-
-        analyticsNetFlow:
-            formatMoney(
-                analytics.netFlow
-            )
-    };
-
-
-    Object.entries(elements).forEach(
-        ([id, value]) => {
-
-            const element =
-                getElement(id);
-
-
-            if (element) {
-
-                element.textContent =
-                    value;
-            }
-        }
-    );
-
-
-    const total =
-        analytics.totalTransactions;
-
-
-    const depositProgress =
-        getElement(
-            "depositProgress"
-        );
-
-
-    const withdrawalProgress =
-        getElement(
-            "withdrawalProgress"
-        );
-
-
-    const transferProgress =
-        getElement(
-            "transferProgress"
-        );
-
-
-    if (total > 0) {
-
-        if (depositProgress) {
-
-            depositProgress.style.width =
-                `${analytics.deposits / total * 100}%`;
-        }
-
-
-        if (withdrawalProgress) {
-
-            withdrawalProgress.style.width =
-                `${analytics.withdrawals / total * 100}%`;
-        }
-
-
-        if (transferProgress) {
-
-            transferProgress.style.width =
-                `${analytics.transfers / total * 100}%`;
-        }
-
-    } else {
-
-        if (depositProgress) {
-            depositProgress.style.width = "0%";
-        }
-
-        if (withdrawalProgress) {
-            withdrawalProgress.style.width = "0%";
-        }
-
-        if (transferProgress) {
-            transferProgress.style.width = "0%";
-        }
+    if ($("financialHealthSection")) {
+        return;
     }
 
+    const visualization =
+        $("visualizationSection");
 
-    return analytics;
-}
-
-
-// =========================================================
-// TRANSACTION VISUALIZATION
-// =========================================================
-
-function updateTransactionVisualization() {
-
-    const analytics =
-        calculateTransactionAnalytics();
-
-
-    const values = {
-
-        chartDepositCount:
-            analytics.deposits,
-
-        chartWithdrawalCount:
-            analytics.withdrawals,
-
-        chartTransferCount:
-            analytics.transfers,
-
-        chartMoneyIn:
-            formatMoney(
-                analytics.moneyIn
-            ),
-
-        chartMoneyOut:
-            formatMoney(
-                analytics.moneyOut
-            ),
-
-        chartNetFlow:
-            formatMoney(
-                analytics.netFlow
-            )
-    };
-
-
-    Object.entries(values).forEach(
-        ([id, value]) => {
-
-            const element =
-                getElement(id);
-
-
-            if (element) {
-
-                element.textContent =
-                    value;
-            }
-        }
-    );
-
-
-    const total =
-        analytics.deposits +
-        analytics.withdrawals +
-        analytics.transfers;
-
-
-    const depositBar =
-        getElement(
-            "chartDepositBar"
-        );
-
-
-    const withdrawalBar =
-        getElement(
-            "chartWithdrawalBar"
-        );
-
-
-    const transferBar =
-        getElement(
-            "chartTransferBar"
-        );
-
-
-    if (total > 0) {
-
-        if (depositBar) {
-
-            depositBar.style.width =
-                `${analytics.deposits / total * 100}%`;
-        }
-
-
-        if (withdrawalBar) {
-
-            withdrawalBar.style.width =
-                `${analytics.withdrawals / total * 100}%`;
-        }
-
-
-        if (transferBar) {
-
-            transferBar.style.width =
-                `${analytics.transfers / total * 100}%`;
-        }
-
-    } else {
-
-        if (depositBar) {
-            depositBar.style.width = "0%";
-        }
-
-        if (withdrawalBar) {
-            withdrawalBar.style.width = "0%";
-        }
-
-        if (transferBar) {
-            transferBar.style.width = "0%";
-        }
+    if (!visualization) {
+        return;
     }
+
+    const section =
+        document.createElement("section");
+
+    section.className =
+        "dashboard-card financial-health-card";
+
+    section.id =
+        "financialHealthSection";
+
+    section.innerHTML = `
+
+        <div class="card-header">
+
+            <div>
+
+                <p class="section-label">
+                    FINANCIAL INSIGHTS
+                </p>
+
+                <h2>
+                    Financial Health
+                </h2>
+
+                <p>
+                    Understand your current financial position
+                </p>
+
+            </div>
+
+        </div>
+
+        <div
+            id="financialHealthContent"
+            style="
+                display:grid;
+                grid-template-columns:repeat(3,minmax(0,1fr));
+                gap:16px;
+                margin-top:20px;
+            "
+        >
+
+        </div>
+
+    `;
+
+    visualization.parentNode.insertBefore(
+        section,
+        visualization.nextSibling
+    );
 }
 
 
-// =========================================================
-// FINANCIAL HEALTH
-// =========================================================
+function updateFinancialHealth() {
 
-function calculateFinancialHealth() {
+    createFinancialHealthSection();
 
-    const analytics =
-        calculateTransactionAnalytics();
+    const content =
+        $("financialHealthContent");
 
+    if (!content) {
+        return;
+    }
 
-    let score = 70;
+    const balance =
+        Number(
+            currentAccount?.balance || 0
+        );
 
+    const normalized =
+        transactions.map(normalizeTransaction);
 
-    if (analytics.netFlow > 0) {
+    let moneyIn = 0;
+    let moneyOut = 0;
+
+    normalized.forEach(transaction => {
+
+        const type =
+            transaction.normalizedType;
+
+        const amount =
+            transaction.normalizedAmount;
+
+        if (type.includes("deposit")) {
+            moneyIn += amount;
+        }
+
+        else if (
+            type.includes("withdraw") ||
+            type.includes("withdrawal") ||
+            type.includes("transfer") ||
+            type.includes("upi") ||
+            type.includes("payment") ||
+            type.includes("send")
+        ) {
+            moneyOut += amount;
+        }
+    });
+
+    const netFlow =
+        moneyIn - moneyOut;
+
+    let score = 50;
+
+    if (balance > 0) {
+        score += 20;
+    }
+
+    if (balance >= moneyOut && moneyOut > 0) {
         score += 10;
     }
 
-
-    if (analytics.deposits > 0) {
-        score += 5;
+    if (netFlow > 0) {
+        score += 15;
     }
 
+    if (moneyOut > moneyIn && moneyIn > 0) {
+        score -= 15;
+    }
 
     score =
         Math.max(
             0,
-            Math.min(
-                100,
-                score
+            Math.min(100, score)
+        );
+
+    let health =
+        "Needs Attention";
+
+    if (score >= 80) {
+        health = "Excellent";
+    } else if (score >= 65) {
+        health = "Good";
+    } else if (score >= 50) {
+        health = "Fair";
+    }
+
+    const savingsRatio =
+        moneyIn > 0
+            ? Math.max(
+                0,
+                (netFlow / moneyIn) * 100
             )
-        );
+            : 0;
 
+    const transactionCount =
+        normalized.length;
 
-    return {
+    content.innerHTML = `
 
-        score,
+        <div style="
+            padding:20px;
+            border:1px solid #e2e8f0;
+            border-radius:14px;
+            background:#f8fafc;
+        ">
 
-        deposits:
-            analytics.moneyIn,
+            <span style="
+                display:block;
+                font-size:12px;
+                color:#64748b;
+                margin-bottom:8px;
+            ">
+                Health Score
+            </span>
 
-        withdrawals:
-            analytics.moneyOut,
+            <strong style="
+                display:block;
+                font-size:28px;
+                margin-bottom:5px;
+            ">
+                ${score}/100
+            </strong>
 
-        transfers:
-            analytics.transfers,
+            <span>
+                ${health}
+            </span>
 
-        netFlow:
-            analytics.netFlow,
+        </div>
 
-        totalTransactions:
-            analytics.totalTransactions
-    };
+        <div style="
+            padding:20px;
+            border:1px solid #e2e8f0;
+            border-radius:14px;
+            background:#f8fafc;
+        ">
+
+            <span style="
+                display:block;
+                font-size:12px;
+                color:#64748b;
+                margin-bottom:8px;
+            ">
+                Net Cash Flow
+            </span>
+
+            <strong style="
+                display:block;
+                font-size:24px;
+                margin-bottom:5px;
+            ">
+                ${formatCurrency(netFlow)}
+            </strong>
+
+            <span>
+                ${netFlow >= 0
+                    ? "Positive cash flow"
+                    : "Negative cash flow"}
+            </span>
+
+        </div>
+
+        <div style="
+            padding:20px;
+            border:1px solid #e2e8f0;
+            border-radius:14px;
+            background:#f8fafc;
+        ">
+
+            <span style="
+                display:block;
+                font-size:12px;
+                color:#64748b;
+                margin-bottom:8px;
+            ">
+                Current Position
+            </span>
+
+            <strong style="
+                display:block;
+                font-size:24px;
+                margin-bottom:5px;
+            ">
+                ${formatCurrency(balance)}
+            </strong>
+
+            <span>
+                ${transactionCount} transaction${transactionCount === 1 ? "" : "s"}
+            </span>
+
+        </div>
+
+    `;
+
+    if (window.innerWidth < 800) {
+        content.style.gridTemplateColumns =
+            "1fr";
+    }
 }
 
 
-// =========================================================
-// UPDATE FINANCIAL HEALTH
-// =========================================================
+/* =========================================================
+   LOAD BENEFICIARIES
+========================================================= */
 
-function updateFinancialHealth() {
+async function loadBeneficiaries() {
 
-    const health =
-        calculateFinancialHealth();
+    try {
 
+        const data =
+            await apiRequest(
+                "/beneficiaries/"
+            );
 
-    const scoreElement =
-        getElement(
-            "financialHealthScore"
-        );
-
-
-    if (scoreElement) {
-
-        scoreElement.textContent =
-            health.score;
-    }
-
-
-    const scoreValue =
-        getElement(
-            "scoreCircleValue"
-        );
-
-
-    if (scoreValue) {
-
-        scoreValue.textContent =
-            health.score;
-    }
-
-
-    let statusText =
-        "Stable";
-
-
-    if (health.score >= 85) {
-
-        statusText =
-            "Excellent";
-
-    } else if (health.score >= 70) {
-
-        statusText =
-            "Good";
-
-    } else if (health.score >= 50) {
-
-        statusText =
-            "Needs Attention";
-
-    } else {
-
-        statusText =
-            "Critical";
-    }
-
-
-    const statusElement =
-        getElement(
-            "financialHealthStatus"
-        );
-
-
-    if (statusElement) {
-
-        statusElement.textContent =
-            statusText;
-    }
-
-
-    const message =
-        getElement(
-            "financialHealthMessage"
-        );
-
-
-    if (message) {
-
-        if (health.score >= 85) {
-
-            message.textContent =
-                "Your financial activity looks healthy. Keep maintaining positive cash flow.";
-
-        } else if (health.score >= 70) {
-
-            message.textContent =
-                "Your financial position is stable. Continue monitoring your income and expenses.";
-
+        if (Array.isArray(data)) {
+            beneficiaries = data;
+        } else if (
+            Array.isArray(data?.items)
+        ) {
+            beneficiaries = data.items;
+        } else if (
+            Array.isArray(data?.beneficiaries)
+        ) {
+            beneficiaries =
+                data.beneficiaries;
         } else {
-
-            message.textContent =
-                "Consider reviewing your recent transactions and maintaining a positive cash flow.";
+            beneficiaries = [];
         }
-    }
 
+        renderBeneficiaries();
+        populateUPIBeneficiaries();
 
-    const depositMetric =
-        getElement(
-            "healthDepositProgress"
+        return beneficiaries;
+
+    } catch (error) {
+
+        console.error(
+            "Beneficiary loading failed:",
+            error
         );
 
+        beneficiaries = [];
 
-    if (depositMetric) {
+        renderBeneficiaries();
+        populateUPIBeneficiaries();
 
-        depositMetric.style.width =
-            health.deposits > 0
-                ? "100%"
-                : "0%";
+        return [];
     }
-
-
-    const withdrawalMetric =
-        getElement(
-            "healthWithdrawalProgress"
-        );
-
-
-    if (withdrawalMetric) {
-
-        withdrawalMetric.style.width =
-            health.withdrawals > 0
-                ? "50%"
-                : "0%";
-    }
-
-
-    const transferMetric =
-        getElement(
-            "healthTransferProgress"
-        );
-
-
-    if (transferMetric) {
-
-        transferMetric.style.width =
-            health.transfers > 0
-                ? "50%"
-                : "0%";
-    }
-
-
-    return health;
 }
 
 
-// =========================================================
-// STEP 7.2
-// BANKING NOTIFICATION
-// =========================================================
+/* =========================================================
+   RENDER BENEFICIARIES
+========================================================= */
 
-function showBankingNotification(
-    type,
-    title,
-    message,
-    duration = 4500
-) {
+function renderBeneficiaries() {
 
-    const notification =
-        getElement(
-            "bankingNotification"
-        );
+    const list =
+        $("beneficiariesList");
 
-
-    const icon =
-        getElement(
-            "notificationIcon"
-        );
-
-
-    const notificationTitle =
-        getElement(
-            "notificationTitle"
-        );
-
-
-    const notificationMessage =
-        getElement(
-            "notificationMessage"
-        );
-
-
-    if (!notification) {
+    if (!list) {
         return;
     }
 
+    if (beneficiaries.length === 0) {
 
-    if (notificationTimeout) {
+        list.innerHTML = `
+            <div class="empty-state-block">
 
-        clearTimeout(
-            notificationTimeout
-        );
+                <div class="empty-state-icon">
+                    👤
+                </div>
 
-        notificationTimeout =
-            null;
+                <strong>
+                    No beneficiaries added yet.
+                </strong>
+
+                <span>
+                    Add a beneficiary to make UPI payments faster.
+                </span>
+
+            </div>
+        `;
+
+        return;
     }
 
+    list.innerHTML =
+        beneficiaries.map((beneficiary, index) => {
 
-    notification.classList.remove(
-        "success",
-        "error",
-        "warning"
+            const name =
+                beneficiary?.name ||
+                beneficiary?.beneficiary_name ||
+                beneficiary?.full_name ||
+                `Beneficiary ${index + 1}`;
+
+            const account =
+                beneficiary?.account_number ||
+                beneficiary?.accountNumber ||
+                "--";
+
+            const bank =
+                beneficiary?.bank_name ||
+                beneficiary?.bankName ||
+                "Bank";
+
+            return `
+
+                <div class="beneficiary-item">
+
+                    <div class="beneficiary-icon">
+                        👤
+                    </div>
+
+                    <div class="beneficiary-info">
+
+                        <strong>
+                            ${escapeHTML(name)}
+                        </strong>
+
+                        <span>
+                            ${escapeHTML(bank)}
+                        </span>
+
+                        <small>
+                            A/C ${escapeHTML(account)}
+                        </small>
+
+                    </div>
+
+                </div>
+
+            `;
+
+        }).join("");
+}
+
+
+/* =========================================================
+   POPULATE UPI SELECT
+========================================================= */
+
+function populateUPIBeneficiaries() {
+
+    const select =
+        $("upiBeneficiary");
+
+    if (!select) {
+        return;
+    }
+
+    select.innerHTML = `
+        <option value="">
+            Select beneficiary
+        </option>
+    `;
+
+    beneficiaries.forEach(
+        (beneficiary, index) => {
+
+            const id =
+                beneficiary?.id ??
+                beneficiary?.beneficiary_id ??
+                beneficiary?.account_number ??
+                index;
+
+            const name =
+                beneficiary?.name ||
+                beneficiary?.beneficiary_name ||
+                beneficiary?.full_name ||
+                `Beneficiary ${index + 1}`;
+
+            const account =
+                beneficiary?.account_number ||
+                beneficiary?.accountNumber ||
+                "";
+
+            const option =
+                document.createElement("option");
+
+            option.value =
+                String(id);
+
+            option.dataset.account =
+                String(account);
+
+            option.textContent =
+                account
+                    ? `${name} — ${account}`
+                    : name;
+
+            select.appendChild(option);
+        }
+    );
+}
+
+
+/* =========================================================
+   BENEFICIARY MODAL
+========================================================= */
+
+function openBeneficiaryModal() {
+
+    const modal =
+        $("beneficiaryModal");
+
+    if (!modal) {
+        return;
+    }
+
+    modal.classList.add("active");
+    modal.setAttribute(
+        "aria-hidden",
+        "false"
     );
 
+    const form =
+        $("beneficiaryForm");
 
-    const safeType =
-        [
+    if (form) {
+        form.reset();
+    }
+
+    setText(
+        "beneficiaryMessage",
+        ""
+    );
+}
+
+
+function closeBeneficiaryModal() {
+
+    const modal =
+        $("beneficiaryModal");
+
+    if (!modal) {
+        return;
+    }
+
+    modal.classList.remove("active");
+    modal.setAttribute(
+        "aria-hidden",
+        "true"
+    );
+}
+
+
+/* =========================================================
+   SAVE BENEFICIARY
+========================================================= */
+
+async function saveBeneficiary(event) {
+
+    event.preventDefault();
+
+    const name =
+        $("beneficiaryName")?.value.trim();
+
+    const accountNumber =
+        $("beneficiaryAccount")?.value.trim();
+
+    const bankName =
+        $("beneficiaryBank")?.value.trim();
+
+    const message =
+        $("beneficiaryMessage");
+
+    const button =
+        $("saveBeneficiaryBtn");
+
+    if (!name || !accountNumber || !bankName) {
+
+        if (message) {
+            message.textContent =
+                "Please fill all beneficiary fields.";
+        }
+
+        return;
+    }
+
+    if (button) {
+        button.disabled = true;
+        button.textContent = "Adding...";
+    }
+
+    try {
+
+        await apiRequest(
+            "/beneficiaries/",
+            {
+                method: "POST",
+                body: JSON.stringify({
+                    name: name,
+                    beneficiary_name: name,
+                    account_number: accountNumber,
+                    bank_name: bankName
+                })
+            }
+        );
+
+        closeBeneficiaryModal();
+
+        showNotification(
             "success",
+            "Beneficiary Added",
+            "Beneficiary added successfully."
+        );
+
+        await loadBeneficiaries();
+
+    } catch (error) {
+
+        if (message) {
+            message.textContent =
+                error.message ||
+                "Unable to add beneficiary.";
+        }
+
+        showNotification(
             "error",
-            "warning"
-        ].includes(type)
-            ? type
-            : "success";
-
-
-    notification.classList.add(
-        safeType
-    );
-
-
-    if (icon) {
-
-        icon.textContent =
-            safeType === "success"
-                ? "✓"
-                : "!";
-    }
-
-
-    if (notificationTitle) {
-
-        notificationTitle.textContent =
-            title;
-    }
-
-
-    if (notificationMessage) {
-
-        notificationMessage.textContent =
-            message;
-    }
-
-
-    notification.classList.add(
-        "show"
-    );
-
-
-    notificationTimeout =
-        setTimeout(
-            () => {
-
-                notification.classList.remove(
-                    "show"
-                );
-
-                notificationTimeout =
-                    null;
-
-            },
-            duration
-        );
-}
-
-
-// =========================================================
-// HIDE NOTIFICATION
-// =========================================================
-
-function hideBankingNotification() {
-
-    const notification =
-        getElement(
-            "bankingNotification"
+            "Beneficiary Error",
+            error.message ||
+            "Unable to add beneficiary."
         );
 
+    } finally {
 
-    if (notification) {
-
-        notification.classList.remove(
-            "show"
-        );
-    }
-
-
-    if (notificationTimeout) {
-
-        clearTimeout(
-            notificationTimeout
-        );
-
-        notificationTimeout =
-            null;
+        if (button) {
+            button.disabled = false;
+            button.textContent =
+                "Add Beneficiary";
+        }
     }
 }
 
 
-// =========================================================
-// SETUP NOTIFICATIONS
-// =========================================================
-
-function setupBankingNotifications() {
-
-    const closeButton =
-        getElement(
-            "notificationClose"
-        );
-
-
-    if (closeButton) {
-
-        closeButton.onclick =
-            hideBankingNotification;
-    }
-
-
-    console.log(
-        "Banking notifications initialized."
-    );
-}
-
-
-// =========================================================
-// OPEN TRANSACTION MODAL
-// =========================================================
+/* =========================================================
+   TRANSACTION MODAL
+========================================================= */
 
 function openTransactionModal(type) {
 
     const modal =
-        getElement(
-            "transactionModal"
-        );
+        $("transactionModal");
 
-
-    const form =
-        getElement(
-            "transactionForm"
-        );
-
-
-    const modalTitle =
-        getElement(
-            "modalTitle"
-        );
-
-
-    const amountInput =
-        getElement(
-            "transactionAmount"
-        );
-
+    const title =
+        $("modalTitle");
 
     const recipientGroup =
-        getElement(
-            "recipientGroup"
-        );
+        $("recipientGroup");
 
+    const recipientInput =
+        $("recipientAccount");
 
-    const recipientAccount =
-        getElement(
-            "recipientAccount"
-        );
-
+    const form =
+        $("transactionForm");
 
     const message =
-        getElement(
-            "transactionMessage"
-        );
+        $("transactionMessage");
 
-
-    const confirmButton =
-        getElement(
-            "confirmTransactionBtn"
-        );
-
-
-    if (!modal || !form) {
-
+    if (!modal) {
         console.error(
-            "Transaction modal/form not found."
+            "Transaction modal not found."
         );
-
         return;
     }
-
-
-    if (
-        type !== "deposit" &&
-        type !== "withdraw" &&
-        type !== "transfer"
-    ) {
-
-        console.error(
-            "Invalid transaction type:",
-            type
-        );
-
-        return;
-    }
-
 
     currentTransactionType =
-        type;
+        String(type || "")
+            .toLowerCase();
 
-
-    form.reset();
-
+    if (form) {
+        form.reset();
+    }
 
     if (message) {
         message.textContent = "";
     }
 
+    if (currentTransactionType === "deposit") {
 
-    if (confirmButton) {
-
-        confirmButton.disabled =
-            false;
-    }
-
-
-    if (type === "deposit") {
-
-        if (modalTitle) {
-            modalTitle.textContent =
+        if (title) {
+            title.textContent =
                 "Deposit Money";
         }
 
-        if (confirmButton) {
-            confirmButton.textContent =
-                "Deposit";
-        }
-
         if (recipientGroup) {
             recipientGroup.style.display =
                 "none";
         }
 
-        if (recipientAccount) {
-            recipientAccount.required =
-                false;
+        if (recipientInput) {
+            recipientInput.required = false;
         }
     }
 
+    else if (
+        currentTransactionType === "withdraw"
+    ) {
 
-    if (type === "withdraw") {
-
-        if (modalTitle) {
-            modalTitle.textContent =
+        if (title) {
+            title.textContent =
                 "Withdraw Money";
         }
 
-        if (confirmButton) {
-            confirmButton.textContent =
-                "Withdraw";
-        }
-
         if (recipientGroup) {
             recipientGroup.style.display =
                 "none";
         }
 
-        if (recipientAccount) {
-            recipientAccount.required =
-                false;
+        if (recipientInput) {
+            recipientInput.required = false;
         }
     }
 
+    else {
 
-    if (type === "transfer") {
+        currentTransactionType =
+            "transfer";
 
-        if (modalTitle) {
-            modalTitle.textContent =
+        if (title) {
+            title.textContent =
                 "Transfer Money";
-        }
-
-        if (confirmButton) {
-            confirmButton.textContent =
-                "Transfer";
         }
 
         if (recipientGroup) {
@@ -1917,933 +1840,696 @@ function openTransactionModal(type) {
                 "block";
         }
 
-        if (recipientAccount) {
-            recipientAccount.required =
-                true;
+        if (recipientInput) {
+            recipientInput.required = true;
         }
     }
 
+    modal.classList.add("active");
 
-    modal.classList.add(
-        "show"
+    modal.setAttribute(
+        "aria-hidden",
+        "false"
     );
 
+    setTimeout(() => {
 
-    if (amountInput) {
+        const amount =
+            $("transactionAmount");
 
-        setTimeout(
-            () => {
-                amountInput.focus();
-            },
-            100
-        );
-    }
+        if (amount) {
+            amount.focus();
+        }
+
+    }, 100);
 }
 
-
-// =========================================================
-// CLOSE TRANSACTION MODAL
-// =========================================================
 
 function closeTransactionModal() {
 
     const modal =
-        getElement(
-            "transactionModal"
-        );
+        $("transactionModal");
 
-
-    const form =
-        getElement(
-            "transactionForm"
-        );
-
-
-    const message =
-        getElement(
-            "transactionMessage"
-        );
-
-
-    const recipientGroup =
-        getElement(
-            "recipientGroup"
-        );
-
-
-    const recipientAccount =
-        getElement(
-            "recipientAccount"
-        );
-
-
-    if (modal) {
-
-        modal.classList.remove(
-            "show"
-        );
+    if (!modal) {
+        return;
     }
 
+    modal.classList.remove("active");
+
+    modal.setAttribute(
+        "aria-hidden",
+        "true"
+    );
+
+    currentTransactionType = null;
+
+    const form =
+        $("transactionForm");
 
     if (form) {
         form.reset();
     }
 
+    setText(
+        "transactionMessage",
+        ""
+    );
+}
+
+
+/* =========================================================
+   TRANSACTION API
+   FIXED VERSION
+========================================================= */
+
+async function submitTransaction(event) {
+
+    event.preventDefault();
+
+    const amountInput =
+        $("transactionAmount");
+
+    const recipientInput =
+        $("recipientAccount");
+
+    const message =
+        $("transactionMessage");
+
+    const button =
+        $("confirmTransactionBtn");
+
+    const amount =
+        Number(amountInput?.value || 0);
+
+    const receiverAccount =
+        recipientInput?.value.trim() || "";
+
+
+    /* ---------------------------------------------
+       VALIDATE AMOUNT
+    --------------------------------------------- */
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+
+        if (message) {
+            message.textContent =
+                "Please enter a valid amount.";
+        }
+
+        return;
+    }
+
+
+    /* ---------------------------------------------
+       VALIDATE RECEIVER
+    --------------------------------------------- */
+
+    if (
+        currentTransactionType === "transfer" &&
+        !receiverAccount
+    ) {
+
+        if (message) {
+            message.textContent =
+                "Please enter receiver account number.";
+        }
+
+        return;
+    }
+
+
+    /* ---------------------------------------------
+       BUTTON LOADING STATE
+    --------------------------------------------- */
+
+    if (button) {
+        button.disabled = true;
+        button.textContent = "Processing...";
+    }
 
     if (message) {
         message.textContent = "";
     }
 
 
-    if (recipientGroup) {
-
-        recipientGroup.style.display =
-            "none";
-    }
-
-
-    if (recipientAccount) {
-
-        recipientAccount.required =
-            false;
-    }
-
-
-    currentTransactionType =
-        null;
-}
-
-
-// =========================================================
-// MAKE TRANSACTION
-// =========================================================
-
-async function makeTransaction(
-    endpoint,
-    requestBody,
-    transactionName
-) {
-
-    const confirmButton =
-        getElement(
-            "confirmTransactionBtn"
-        );
-
-
-    const message =
-        getElement(
-            "transactionMessage"
-        );
-
-
-    if (confirmButton) {
-
-        confirmButton.disabled =
-            true;
-
-        confirmButton.textContent =
-            "Processing...";
-    }
-
-
-    if (message) {
-
-        message.textContent =
-            "Processing transaction...";
-    }
-
-
     try {
 
-        const data =
+        /* =============================================
+           DEPOSIT
+        ============================================= */
+
+        if (
+            currentTransactionType === "deposit"
+        ) {
+
+            await apiRequest(
+                "/transactions/deposit",
+                {
+                    method: "POST",
+
+                    body: JSON.stringify({
+                        amount: amount
+                    })
+                }
+            );
+        }
+
+
+        /* =============================================
+           WITHDRAW
+        ============================================= */
+
+        else if (
+            currentTransactionType === "withdraw"
+        ) {
+
+            await apiRequest(
+                "/transactions/withdraw",
+                {
+                    method: "POST",
+
+                    body: JSON.stringify({
+                        amount: amount
+                    })
+                }
+            );
+        }
+
+
+        /* =============================================
+           TRANSFER
+           
+           IMPORTANT:
+           Backend expects receiver_account_number
+           as QUERY PARAMETER, not JSON body.
+        ============================================= */
+
+        else if (
+            currentTransactionType === "transfer"
+        ) {
+
+            const encodedReceiver =
+                encodeURIComponent(receiverAccount);
+
+            const endpoint =
+                `/transactions/transfer?receiver_account_number=${encodedReceiver}`;
+
+            console.log(
+                "Transfer receiver:",
+                receiverAccount
+            );
+
+            console.log(
+                "Transfer endpoint:",
+                endpoint
+            );
+
+
             await apiRequest(
                 endpoint,
                 {
                     method: "POST",
 
-                    body:
-                        JSON.stringify(
-                            requestBody
-                        )
+                    body: JSON.stringify({
+                        amount: amount
+                    })
                 }
             );
-
-
-        console.log(
-            `${transactionName} successful:`,
-            data
-        );
-
-
-        if (message) {
-
-            message.textContent =
-                `${transactionName} successful!`;
         }
 
 
-        showBankingNotification(
+        /* ---------------------------------------------
+           SUCCESS
+        --------------------------------------------- */
 
+        closeTransactionModal();
+
+        showNotification(
             "success",
-
-            `${transactionName} Successful`,
-
-            `Your ${transactionName.toLowerCase()} transaction was completed successfully.`
+            "Transaction Successful",
+            `${capitalize(currentTransactionType)} completed successfully.`
         );
 
 
-        await refreshDashboardData(
-            false
-        );
+        /* ---------------------------------------------
+           REFRESH DASHBOARD
+        --------------------------------------------- */
 
+        await refreshDashboard();
 
-        setTimeout(
-            () => {
-                closeTransactionModal();
-            },
-            1000
-        );
-
-
-        return true;
 
     } catch (error) {
 
         console.error(
-            `${transactionName} failed:`,
+            "Transaction failed:",
             error
         );
 
 
+        /*
+         * Convert FastAPI validation errors
+         * into a clean message.
+         */
+
         let errorMessage =
             error.message ||
-            `${transactionName} failed.`;
+            "Unable to complete transaction.";
 
 
         if (
-            error.message &&
-            error.message
-                .toLowerCase()
-                .includes(
-                    "failed to fetch"
-                )
+            errorMessage.includes(
+                "receiver_account_number"
+            )
         ) {
 
             errorMessage =
-                "Cannot connect to the banking server. Make sure FastAPI is running on port 8004.";
+                "Receiver account number is required.";
+
         }
 
 
         if (message) {
-
             message.textContent =
                 errorMessage;
         }
 
 
-        showBankingNotification(
-
+        showNotification(
             "error",
-
-            `${transactionName} Failed`,
-
+            "Transaction Failed",
             errorMessage
         );
 
 
-        if (confirmButton) {
+    } finally {
 
-            confirmButton.disabled =
-                false;
+        if (button) {
 
-            confirmButton.textContent =
-                transactionName;
+            button.disabled = false;
+
+            button.textContent =
+                "Confirm Transaction";
+        }
+    }
+}
+
+/* =========================================================
+   UPI PAYMENT
+========================================================= */
+
+async function submitUPIPayment(event) {
+
+    event.preventDefault();
+
+    const beneficiarySelect =
+        $("upiBeneficiary");
+
+    const amountInput =
+        $("upiAmount");
+
+    const message =
+        $("upiMessage");
+
+    const button =
+        $("upiPayBtn");
+
+    const beneficiaryId =
+        beneficiarySelect?.value || "";
+
+    const selectedOption =
+        beneficiarySelect?.selectedOptions?.[0];
+
+    const amount =
+        Number(amountInput?.value || 0);
+
+    if (!beneficiaryId) {
+
+        if (message) {
+            message.textContent =
+                "Please select a beneficiary.";
         }
 
-
-        return false;
-    }
-}
-
-
-// =========================================================
-// TRANSACTION FORM
-// =========================================================
-
-function setupTransactionForm() {
-
-    const form =
-        getElement(
-            "transactionForm"
-        );
-
-
-    if (!form) {
-
-        console.warn(
-            "transactionForm not found."
-        );
-
         return;
     }
 
-
-    console.log(
-        "Transaction form initialized."
-    );
-
-
-    form.onsubmit =
-        async function(event) {
-
-            event.preventDefault();
-            event.stopPropagation();
-
-
-            const amountInput =
-                getElement(
-                    "transactionAmount"
-                );
-
-
-            const recipientInput =
-                getElement(
-                    "recipientAccount"
-                );
-
-
-            const message =
-                getElement(
-                    "transactionMessage"
-                );
-
-
-            const amount =
-                Number(
-                    amountInput?.value
-                );
-
-
-            if (
-                !Number.isFinite(amount) ||
-                amount <= 0
-            ) {
-
-                if (message) {
-
-                    message.textContent =
-                        "Please enter a valid amount greater than ₹0.";
-                }
-
-
-                showBankingNotification(
-
-                    "warning",
-
-                    "Invalid Amount",
-
-                    "Please enter an amount greater than ₹0."
-                );
-
-
-                return;
-            }
-
-
-            if (!currentTransactionType) {
-
-                if (message) {
-
-                    message.textContent =
-                        "Please select a transaction type.";
-                }
-
-                return;
-            }
-
-
-            if (
-                currentTransactionType ===
-                "deposit"
-            ) {
-
-                await makeTransaction(
-
-                    "/transactions/deposit",
-
-                    {
-                        amount: amount
-                    },
-
-                    "Deposit"
-                );
-
-                return;
-            }
-
-
-            if (
-                currentTransactionType ===
-                "withdraw"
-            ) {
-
-                await makeTransaction(
-
-                    "/transactions/withdraw",
-
-                    {
-                        amount: amount
-                    },
-
-                    "Withdraw"
-                );
-
-                return;
-            }
-
-
-            if (
-                currentTransactionType ===
-                "transfer"
-            ) {
-
-                const receiver =
-                    recipientInput
-                        ?.value
-                        ?.trim() || "";
-
-
-                if (!receiver) {
-
-                    if (message) {
-
-                        message.textContent =
-                            "Please enter the receiver account number.";
-                    }
-
-
-                    showBankingNotification(
-
-                        "warning",
-
-                        "Receiver Required",
-
-                        "Please enter the receiver account number."
-                    );
-
-
-                    return;
-                }
-
-
-                const endpoint =
-                    "/transactions/transfer" +
-                    "?receiver_account_number=" +
-                    encodeURIComponent(
-                        receiver
-                    );
-
-
-                await makeTransaction(
-
-                    endpoint,
-
-                    {
-                        amount: amount
-                    },
-
-                    "Transfer"
-                );
-            }
-        };
-}
-
-
-// =========================================================
-// SEARCH
-// =========================================================
-
-function setupSearch() {
-
-    const search =
-        getElement(
-            "transactionSearch"
-        );
-
-
-    if (!search) {
-        return;
-    }
-
-
-    search.addEventListener(
-        "input",
-        renderTransactions
-    );
-}
-
-
-// =========================================================
-// FILTER
-// =========================================================
-
-function setupFilter() {
-
-    const filter =
-        getElement(
-            "transactionFilter"
-        );
-
-
-    if (!filter) {
-        return;
-    }
-
-
-    filter.addEventListener(
-        "change",
-        renderTransactions
-    );
-}
-
-
-// =========================================================
-// MODAL EVENTS
-// =========================================================
-
-function setupModal() {
-
-    const modal =
-        getElement(
-            "transactionModal"
-        );
-
-
-    const closeButton =
-        getElement(
-            "closeModalBtn"
-        );
-
-
-    const cancelButton =
-        getElement(
-            "cancelModalBtn"
-        );
-
-
-    if (closeButton) {
-
-        closeButton.onclick =
-            closeTransactionModal;
-    }
-
-
-    if (cancelButton) {
-
-        cancelButton.onclick =
-            closeTransactionModal;
-    }
-
-
-    if (modal) {
-
-        modal.addEventListener(
-            "click",
-            function(event) {
-
-                if (
-                    event.target === modal ||
-                    event.target.classList.contains(
-                        "modal-overlay"
-                    )
-                ) {
-
-                    closeTransactionModal();
-                }
-            }
-        );
-    }
-
-
-    document.addEventListener(
-        "keydown",
-        function(event) {
-
-            if (
-                event.key === "Escape"
-            ) {
-
-                closeTransactionModal();
-            }
+    if (!Number.isFinite(amount) || amount <= 0) {
+
+        if (message) {
+            message.textContent =
+                "Please enter a valid amount.";
         }
-    );
-}
-
-
-// =========================================================
-// SHOW TRANSACTION HISTORY
-// =========================================================
-
-async function showTransactionHistory() {
-
-    const transactionsButton =
-        getElement(
-            "transactionsBtn"
-        );
-
-
-    const dashboardButton =
-        getElement(
-            "dashboardNavBtn"
-        );
-
-
-    if (dashboardButton) {
-        dashboardButton.classList.remove(
-            "active"
-        );
-    }
-
-
-    if (transactionsButton) {
-        transactionsButton.classList.add(
-            "active"
-        );
-    }
-
-
-    const title =
-        getElement(
-            "transactionsTitle"
-        );
-
-
-    if (title) {
-
-        title.textContent =
-            "Transaction History";
-    }
-
-
-    const section =
-        getElement(
-            "transactionsSection"
-        );
-
-
-    if (section) {
-
-        section.scrollIntoView({
-
-            behavior: "smooth",
-
-            block: "start"
-        });
-    }
-
-
-    await loadTransactions(false);
-}
-
-
-// =========================================================
-// STEP 7.3-D
-// RETURN TO DASHBOARD
-// =========================================================
-
-function showDashboardHome() {
-
-    console.log(
-        "Dashboard button clicked."
-    );
-
-
-    const dashboardButton =
-        getElement(
-            "dashboardNavBtn"
-        );
-
-
-    const transactionsButton =
-        getElement(
-            "transactionsBtn"
-        );
-
-
-    if (dashboardButton) {
-
-        dashboardButton.classList.add(
-            "active"
-        );
-    }
-
-
-    if (transactionsButton) {
-
-        transactionsButton.classList.remove(
-            "active"
-        );
-    }
-
-
-    const title =
-        getElement(
-            "transactionsTitle"
-        );
-
-
-    if (title) {
-
-        title.textContent =
-            "Recent Transactions";
-    }
-
-
-    window.scrollTo({
-
-        top: 0,
-
-        behavior: "smooth"
-    });
-}
-
-
-// =========================================================
-// QUICK ACTIONS
-// =========================================================
-
-function setupQuickActions() {
-
-    console.log(
-        "Setting up Quick Actions..."
-    );
-
-
-    // -----------------------------------------------------
-    // DASHBOARD BUTTON
-    // -----------------------------------------------------
-
-    const dashboardButton =
-        getElement(
-            "dashboardNavBtn"
-        );
-
-
-    if (dashboardButton) {
-
-        dashboardButton.onclick =
-            function(event) {
-
-                event.preventDefault();
-                event.stopPropagation();
-
-                showDashboardHome();
-            };
-    }
-
-
-    // -----------------------------------------------------
-    // DEPOSIT
-    // -----------------------------------------------------
-
-    const depositButton =
-        getElement(
-            "depositBtn"
-        );
-
-
-    if (depositButton) {
-
-        depositButton.onclick =
-            function(event) {
-
-                event.preventDefault();
-                event.stopPropagation();
-
-                openTransactionModal(
-                    "deposit"
-                );
-            };
-    }
-
-
-    // -----------------------------------------------------
-    // WITHDRAW
-    // -----------------------------------------------------
-
-    const withdrawButton =
-        getElement(
-            "withdrawBtn"
-        );
-
-
-    if (withdrawButton) {
-
-        withdrawButton.onclick =
-            function(event) {
-
-                event.preventDefault();
-                event.stopPropagation();
-
-                openTransactionModal(
-                    "withdraw"
-                );
-            };
-    }
-
-
-    // -----------------------------------------------------
-    // TRANSFER
-    // -----------------------------------------------------
-
-    const transferButton =
-        getElement(
-            "transferBtn"
-        );
-
-
-    if (transferButton) {
-
-        transferButton.onclick =
-            function(event) {
-
-                event.preventDefault();
-                event.stopPropagation();
-
-                openTransactionModal(
-                    "transfer"
-                );
-            };
-    }
-
-
-    // -----------------------------------------------------
-    // TRANSACTIONS
-    // -----------------------------------------------------
-
-    const transactionsButton =
-        getElement(
-            "transactionsBtn"
-        );
-
-
-    if (transactionsButton) {
-
-        transactionsButton.onclick =
-            function(event) {
-
-                event.preventDefault();
-                event.stopPropagation();
-
-                showTransactionHistory();
-            };
-    }
-
-
-    console.log(
-        "Quick Actions setup complete."
-    );
-}
-
-
-// =========================================================
-// REFRESH DASHBOARD DATA
-// =========================================================
-
-async function refreshDashboardData(
-    showButtonState = false
-) {
-
-    if (dashboardIsRefreshing) {
-
-        console.log(
-            "Dashboard refresh already running."
-        );
 
         return;
     }
 
+    if (button) {
+        button.disabled = true;
+        button.textContent =
+            "Processing...";
+    }
 
-    dashboardIsRefreshing =
-        true;
+    if (message) {
+        message.textContent = "";
+    }
 
-
-    const refreshButton =
-        getElement(
-            "refreshBtn"
+    const beneficiary =
+        beneficiaries.find(item =>
+            String(
+                item?.id ??
+                item?.beneficiary_id ??
+                item?.account_number
+            ) ===
+            String(beneficiaryId)
         );
 
-
-    const originalText =
-        refreshButton
-            ? refreshButton.textContent
-            : "↻";
-
+    const accountNumber =
+        beneficiary?.account_number ||
+        beneficiary?.accountNumber ||
+        selectedOption?.dataset?.account ||
+        "";
 
     try {
 
-        console.log(
-            "Refreshing dashboard data..."
+        await apiRequest(
+            "/transactions/upi",
+            {
+                method: "POST",
+                body: JSON.stringify({
+                    amount: amount,
+                    beneficiary_id:
+                        beneficiary?.id ??
+                        beneficiary?.beneficiary_id ??
+                        null,
+                    beneficiary_account:
+                        accountNumber,
+                    receiver_account_number:
+                        accountNumber
+                })
+            }
         );
 
-
-        if (
-            refreshButton &&
-            showButtonState
-        ) {
-
-            refreshButton.disabled =
-                true;
-
-            refreshButton.classList.add(
-                "refreshing"
-            );
-
-            refreshButton.textContent =
-                "Refreshing...";
+        if (amountInput) {
+            amountInput.value = "";
         }
 
-
-        const results =
-            await Promise.allSettled([
-
-                loadProfile(),
-
-                loadSummary(),
-
-                loadAccount(),
-
-                loadTransactions(false)
-
-            ]);
-
-
-        const successful =
-            results.some(
-                result =>
-                    result.status ===
-                    "fulfilled"
-            );
-
-
-        if (successful) {
-
-            setDashboardLiveStatus(
-                true
-            );
-
-            updateLastUpdated();
-
-        } else {
-
-            setDashboardLiveStatus(
-                false
-            );
+        if (beneficiarySelect) {
+            beneficiarySelect.value = "";
         }
 
+        showNotification(
+            "success",
+            "UPI Payment Successful",
+            "Your UPI payment was completed successfully."
+        );
+
+        await refreshDashboard();
+
+    } catch (error) {
+
+        if (message) {
+            message.textContent =
+                error.message ||
+                "UPI payment failed.";
+        }
+
+        showNotification(
+            "error",
+            "UPI Payment Failed",
+            error.message ||
+            "Unable to complete UPI payment."
+        );
+
+    } finally {
+
+        if (button) {
+            button.disabled = false;
+            button.textContent =
+                "Pay with UPI";
+        }
+    }
+}
+
+
+/* =========================================================
+   QUICK ACTIONS
+========================================================= */
+
+function setupQuickActions() {
+
+    const depositBtn =
+        $("depositBtn");
+
+    const withdrawBtn =
+        $("withdrawBtn");
+
+    const transferBtn =
+        $("transferBtn");
+
+    const upiQuickBtn =
+        $("upiQuickBtn");
+
+    if (depositBtn) {
+        depositBtn.addEventListener(
+            "click",
+            () => openTransactionModal(
+                "deposit"
+            )
+        );
+    }
+
+    if (withdrawBtn) {
+        withdrawBtn.addEventListener(
+            "click",
+            () => openTransactionModal(
+                "withdraw"
+            )
+        );
+    }
+
+    if (transferBtn) {
+        transferBtn.addEventListener(
+            "click",
+            () => openTransactionModal(
+                "transfer"
+            )
+        );
+    }
+
+    if (upiQuickBtn) {
+        upiQuickBtn.addEventListener(
+            "click",
+            () => {
+
+                const section =
+                    $("upiPaymentSection");
+
+                if (section) {
+                    section.scrollIntoView({
+                        behavior: "smooth",
+                        block: "center"
+                    });
+                }
+
+            }
+        );
+    }
+}
+
+
+/* =========================================================
+   MODAL EVENTS
+========================================================= */
+
+function setupModalEvents() {
+
+    const closeModalBtn =
+        $("closeModalBtn");
+
+    const cancelModalBtn =
+        $("cancelModalBtn");
+
+    const transactionModal =
+        $("transactionModal");
+
+    if (closeModalBtn) {
+        closeModalBtn.addEventListener(
+            "click",
+            closeTransactionModal
+        );
+    }
+
+    if (cancelModalBtn) {
+        cancelModalBtn.addEventListener(
+            "click",
+            closeTransactionModal
+        );
+    }
+
+    if (transactionModal) {
+
+        const overlay =
+            transactionModal.querySelector(
+                ".modal-overlay"
+            );
+
+        if (overlay) {
+            overlay.addEventListener(
+                "click",
+                closeTransactionModal
+            );
+        }
+    }
+
+    const addBeneficiaryBtn =
+        $("addBeneficiaryBtn");
+
+    const closeBeneficiary =
+        $("closeBeneficiaryModal");
+
+    const cancelBeneficiary =
+        $("cancelBeneficiaryBtn");
+
+    const beneficiaryModal =
+        $("beneficiaryModal");
+
+    if (addBeneficiaryBtn) {
+        addBeneficiaryBtn.addEventListener(
+            "click",
+            openBeneficiaryModal
+        );
+    }
+
+    if (closeBeneficiary) {
+        closeBeneficiary.addEventListener(
+            "click",
+            closeBeneficiaryModal
+        );
+    }
+
+    if (cancelBeneficiary) {
+        cancelBeneficiary.addEventListener(
+            "click",
+            closeBeneficiaryModal
+        );
+    }
+
+    if (beneficiaryModal) {
+
+        const overlay =
+            beneficiaryModal.querySelector(
+                ".modal-overlay"
+            );
+
+        if (overlay) {
+            overlay.addEventListener(
+                "click",
+                closeBeneficiaryModal
+            );
+        }
+    }
+}
+
+
+/* =========================================================
+   FORM EVENTS
+========================================================= */
+
+function setupForms() {
+
+    const transactionForm =
+        $("transactionForm");
+
+    const beneficiaryForm =
+        $("beneficiaryForm");
+
+    const upiForm =
+        $("upiPaymentForm");
+
+    if (transactionForm) {
+
+        transactionForm.addEventListener(
+            "submit",
+            submitTransaction
+        );
 
         console.log(
-            "Dashboard refresh completed."
+            "Transaction form ready."
+        );
+    }
+
+    if (beneficiaryForm) {
+
+        beneficiaryForm.addEventListener(
+            "submit",
+            saveBeneficiary
+        );
+    }
+
+    if (upiForm) {
+
+        upiForm.addEventListener(
+            "submit",
+            submitUPIPayment
+        );
+    }
+}
+
+
+/* =========================================================
+   SEARCH / FILTER
+========================================================= */
+
+function setupTransactionControls() {
+
+    const search =
+        $("transactionSearch");
+
+    const filter =
+        $("transactionFilter");
+
+    if (search) {
+
+        search.addEventListener(
+            "input",
+            renderTransactions
+        );
+    }
+
+    if (filter) {
+
+        filter.addEventListener(
+            "change",
+            renderTransactions
+        );
+    }
+}
+
+
+/* =========================================================
+   REFRESH
+========================================================= */
+
+async function refreshDashboard() {
+
+    try {
+
+        setLiveStatus(
+            true,
+            "Refreshing"
+        );
+
+        await Promise.all([
+            loadProfile(),
+            loadAccount(),
+            loadTransactions(),
+            loadBeneficiaries()
+        ]);
+
+        updateLastUpdated();
+
+        setLiveStatus(
+            true,
+            "Connected"
         );
 
     } catch (error) {
@@ -2853,413 +2539,396 @@ async function refreshDashboardData(
             error
         );
 
-
-        setDashboardLiveStatus(
-            false
+        setLiveStatus(
+            false,
+            "Connection problem"
         );
 
-    } finally {
-
-        dashboardIsRefreshing =
-            false;
-
-
-        if (
-            refreshButton &&
-            showButtonState
-        ) {
-
-            refreshButton.disabled =
-                false;
-
-            refreshButton.classList.remove(
-                "refreshing"
-            );
-
-            refreshButton.textContent =
-                originalText;
-        }
     }
 }
 
 
-// =========================================================
-// REFRESH BUTTONS
-// =========================================================
+/* =========================================================
+   REFRESH BUTTONS
+========================================================= */
 
-function setupRefresh() {
+function setupRefreshButtons() {
 
-    const refreshButton =
-        getElement(
-            "refreshBtn"
-        );
+    const refreshBtn =
+        $("refreshBtn");
 
+    const refreshDataBtn =
+        $("refreshDataBtn");
 
-    const secondaryRefreshButton =
-        getElement(
-            "refreshBtnSecondary"
-        );
+    const refreshMini =
+        $("refreshMiniStatement");
 
+    if (refreshBtn) {
 
-    if (refreshButton) {
+        refreshBtn.addEventListener(
+            "click",
+            async () => {
 
-        refreshButton.onclick =
-            async function(event) {
+                await refreshDashboard();
 
-                event.preventDefault();
-
-                await refreshDashboardData(
-                    true
+                showNotification(
+                    "success",
+                    "Dashboard Refreshed",
+                    "Latest account data loaded."
                 );
-            };
-    }
-
-
-    if (secondaryRefreshButton) {
-
-        secondaryRefreshButton.onclick =
-            async function(event) {
-
-                event.preventDefault();
-
-                await refreshDashboardData(
-                    false
-                );
-            };
-    }
-}
-
-
-// =========================================================
-// STEP 7.1
-// AUTO REFRESH
-// =========================================================
-
-function setupAutoRefresh() {
-
-    if (dashboardRefreshInterval) {
-
-        clearInterval(
-            dashboardRefreshInterval
+            }
         );
     }
 
+    if (refreshDataBtn) {
 
-    dashboardRefreshInterval =
-        setInterval(
-            async function() {
-
-                console.log(
-                    "Automatic dashboard refresh..."
-                );
-
-
-                await refreshDashboardData(
-                    false
-                );
-
-            },
-            30000
+        refreshDataBtn.addEventListener(
+            "click",
+            refreshDashboard
         );
+    }
 
+    if (refreshMini) {
 
-    console.log(
-        "Auto refresh enabled: every 30 seconds."
-    );
-}
+        refreshMini.addEventListener(
+            "click",
+            async () => {
 
+                await loadTransactions();
+                updateLastUpdated();
 
-// =========================================================
-// STEP 7.3-B
-// CONNECTION CHECK
-// =========================================================
-
-async function checkBackendConnection() {
-
-    try {
-
-        const token =
-            getToken();
-
-
-        if (!token) {
-
-            setDashboardLiveStatus(
-                false
-            );
-
-            return false;
-        }
-
-
-        const response =
-            await fetch(
-                `${API_URL}/users/me`,
-                {
-                    method: "GET",
-
-                    headers: {
-                        "Authorization":
-                            `Bearer ${token}`
-                    }
-                }
-            );
-
-
-        if (response.ok) {
-
-            setDashboardLiveStatus(
-                true
-            );
-
-            console.log(
-                "🟢 Backend connection: LIVE"
-            );
-
-            return true;
-        }
-
-
-        setDashboardLiveStatus(
-            false
+            }
         );
-
-
-        console.log(
-            "🔴 Backend connection: OFFLINE"
-        );
-
-
-        return false;
-
-    } catch (error) {
-
-        setDashboardLiveStatus(
-            false
-        );
-
-
-        console.log(
-            "🔴 Backend connection: OFFLINE"
-        );
-
-
-        return false;
     }
 }
 
 
-// =========================================================
-// STEP 7.3-B
-// CONNECTION MONITOR
-// =========================================================
-
-function setupConnectionMonitor() {
-
-    if (connectionMonitorInterval) {
-
-        clearInterval(
-            connectionMonitorInterval
-        );
-    }
-
-
-    checkBackendConnection();
-
-
-    connectionMonitorInterval =
-        setInterval(
-            checkBackendConnection,
-            10000
-        );
-
-
-    console.log(
-        "Live connection monitoring enabled."
-    );
-}
-
-
-// =========================================================
-// LOGOUT
-// =========================================================
+/* =========================================================
+   LOGOUT
+========================================================= */
 
 function setupLogout() {
 
-    const logoutButton =
-        getElement(
-            "logoutBtn"
-        );
+    const logoutBtn =
+        $("logoutBtn");
 
-
-    if (!logoutButton) {
-
-        console.warn(
-            "#logoutBtn not found."
-        );
-
+    if (!logoutBtn) {
         return;
     }
 
+    logoutBtn.addEventListener(
+        "click",
+        () => {
 
-    logoutButton.onclick =
-        function(event) {
-
-            event.preventDefault();
-            event.stopPropagation();
-
-
-            console.log(
-                "Logging out..."
-            );
-
-
-            if (dashboardRefreshInterval) {
-
-                clearInterval(
-                    dashboardRefreshInterval
+            const confirmed =
+                window.confirm(
+                    "Are you sure you want to logout?"
                 );
 
-                dashboardRefreshInterval =
-                    null;
+            if (!confirmed) {
+                return;
             }
-
-
-            if (connectionMonitorInterval) {
-
-                clearInterval(
-                    connectionMonitorInterval
-                );
-
-                connectionMonitorInterval =
-                    null;
-            }
-
 
             localStorage.removeItem(
                 "access_token"
             );
 
-
-            window.location.replace(
-                "index.html"
+            localStorage.removeItem(
+                "token"
             );
-        };
+
+            sessionStorage.removeItem(
+                "access_token"
+            );
+
+            sessionStorage.removeItem(
+                "token"
+            );
+
+            showNotification(
+                "success",
+                "Logged Out",
+                "You have been securely logged out."
+            );
+
+            setTimeout(() => {
+
+                window.location.href =
+                    "login.html";
+
+            }, 500);
+        }
+    );
 }
 
 
-// =========================================================
-// FINAL ACCOUNT NUMBER CHECK
-// =========================================================
+/* =========================================================
+   TRANSACTIONS NAVIGATION
+========================================================= */
 
-function updateFinalAccountNumber() {
+function setupNavigation() {
 
-    const accountNumber =
-        currentAccount?.account_number ||
-        currentAccount?.accountNumber ||
-        currentSummary?.account_number ||
-        currentSummary?.accountNumber ||
-        currentSummary?.account?.account_number ||
-        currentSummary?.account?.accountNumber;
+    const transactionsBtn =
+        $("transactionsBtn");
 
+    const dashboardNavBtn =
+        $("dashboardNavBtn");
 
-    if (accountNumber) {
+    if (transactionsBtn) {
 
-        setAccountNumber(
-            accountNumber
+        transactionsBtn.addEventListener(
+            "click",
+            () => {
+
+                document
+                    .querySelectorAll(
+                        ".nav-item"
+                    )
+                    .forEach(item => {
+                        item.classList.remove(
+                            "active"
+                        );
+                    });
+
+                transactionsBtn.classList.add(
+                    "active"
+                );
+
+                const section =
+                    $("transactionsSection");
+
+                if (section) {
+
+                    section.scrollIntoView({
+                        behavior: "smooth",
+                        block: "start"
+                    });
+                }
+            }
+        );
+    }
+
+    if (dashboardNavBtn) {
+
+        dashboardNavBtn.addEventListener(
+            "click",
+            () => {
+
+                document
+                    .querySelectorAll(
+                        ".nav-item"
+                    )
+                    .forEach(item => {
+                        item.classList.remove(
+                            "active"
+                        );
+                    });
+
+                dashboardNavBtn.classList.add(
+                    "active"
+                );
+
+                window.scrollTo({
+                    top: 0,
+                    behavior: "smooth"
+                });
+            }
         );
     }
 }
 
 
-// =========================================================
-// INITIALIZE DASHBOARD
-// =========================================================
+/* =========================================================
+   NOTIFICATION CLOSE
+========================================================= */
 
-async function initializeDashboard() {
+function setupNotification() {
 
-    console.log(
-        "Initializing DigitalBank Dashboard..."
-    );
+    const close =
+        $("notificationClose");
 
+    if (close) {
 
-    // -----------------------------------------------------
-    // INITIAL STATUS
-    // -----------------------------------------------------
-
-    setDashboardLiveStatus(
-        true
-    );
-
-
-    // -----------------------------------------------------
-    // SETUP UI
-    // -----------------------------------------------------
-
-    setupTransactionForm();
-
-    setupSearch();
-
-    setupFilter();
-
-    setupModal();
-
-    setupRefresh();
-
-    setupAutoRefresh();
-
-    setupConnectionMonitor();
-
-    setupBankingNotifications();
-
-    setupLogout();
-
-    setupQuickActions();
+        close.addEventListener(
+            "click",
+            closeNotification
+        );
+    }
+}
 
 
-    // -----------------------------------------------------
-    // LOAD DATA
-    // -----------------------------------------------------
+/* =========================================================
+   KEYBOARD EVENTS
+========================================================= */
 
-    await loadProfile();
+function setupKeyboardEvents() {
 
-    await loadSummary();
+    document.addEventListener(
+        "keydown",
+        event => {
 
-    await loadAccount();
+            if (event.key !== "Escape") {
+                return;
+            }
 
-    await loadTransactions();
-
-
-    // -----------------------------------------------------
-    // FINAL ACCOUNT NUMBER
-    // -----------------------------------------------------
-
-    updateFinalAccountNumber();
-
-
-    // -----------------------------------------------------
-    // LAST UPDATED
-    // -----------------------------------------------------
-
-    updateLastUpdated();
-
-
-    // -----------------------------------------------------
-    // FINAL CONNECTION CHECK
-    // -----------------------------------------------------
-
-    await checkBackendConnection();
-
-
-    console.log(
-        "Dashboard initialized successfully."
+            closeTransactionModal();
+            closeBeneficiaryModal();
+            closeNotification();
+        }
     );
 }
 
 
-// =========================================================
-// START DASHBOARD
-// =========================================================
+/* =========================================================
+   ONLINE STATUS
+========================================================= */
+
+function setupOnlineStatus() {
+
+    const dot =
+        $("onlineStatusDot");
+
+    const text =
+        $("onlineStatusText");
+
+    function update() {
+
+        const online =
+            navigator.onLine;
+
+        if (dot) {
+            dot.classList.toggle(
+                "offline",
+                !online
+            );
+        }
+
+        if (text) {
+            text.textContent =
+                online
+                    ? "Online"
+                    : "Offline";
+        }
+    }
+
+    window.addEventListener(
+        "online",
+        update
+    );
+
+    window.addEventListener(
+        "offline",
+        update
+    );
+
+    update();
+}
+
+
+/* =========================================================
+   ESCAPE HTML
+========================================================= */
+
+function escapeHTML(value) {
+
+    if (value === null || value === undefined) {
+        return "";
+    }
+
+    return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+
+/* =========================================================
+   CAPITALIZE
+========================================================= */
+
+function capitalize(value) {
+
+    if (!value) {
+        return "";
+    }
+
+    return (
+        String(value)
+            .charAt(0)
+            .toUpperCase() +
+        String(value).slice(1)
+    );
+}
+
+
+/* =========================================================
+   INITIALIZATION
+========================================================= */
+
+async function initializeDashboard() {
+
+    console.log(
+        "DigitalBank Dashboard initializing..."
+    );
+
+    setupQuickActions();
+    setupModalEvents();
+    setupForms();
+    setupTransactionControls();
+    setupRefreshButtons();
+    setupLogout();
+    setupNavigation();
+    setupNotification();
+    setupKeyboardEvents();
+    setupOnlineStatus();
+
+    createFinancialHealthSection();
+
+    try {
+
+        setLiveStatus(
+            true,
+            "Connecting"
+        );
+
+        await Promise.all([
+            loadProfile(),
+            loadAccount(),
+            loadTransactions(),
+            loadBeneficiaries()
+        ]);
+
+        updateLastUpdated();
+
+        setLiveStatus(
+            true,
+            "Connected"
+        );
+
+        console.log(
+            "DigitalBank Dashboard loaded successfully."
+        );
+
+    } catch (error) {
+
+        console.error(
+            "Dashboard initialization error:",
+            error
+        );
+
+        setLiveStatus(
+            false,
+            "Connection problem"
+        );
+    }
+}
+
+
+/* =========================================================
+   START
+========================================================= */
 
 if (
     document.readyState ===
@@ -3275,3 +2944,348 @@ if (
 
     initializeDashboard();
 }
+/* =========================================================
+   FINANCIAL HEALTH
+   Add this code at the VERY END of dashboard.js
+========================================================= */
+
+(function () {
+
+    "use strict";
+
+    function getNumberFromElement(id) {
+
+        const element = document.getElementById(id);
+
+        if (!element) {
+            return 0;
+        }
+
+        const text = element.textContent || "";
+
+        const number = parseFloat(
+            text
+                .replace(/[₹,\s]/g, "")
+                .replace(/[^\d.-]/g, "")
+        );
+
+        return Number.isFinite(number) ? number : 0;
+    }
+
+
+    function getTransactionCount() {
+
+        const container =
+            document.getElementById("transactionsContainer");
+
+        if (!container) {
+            return 0;
+        }
+
+        const rows = container.querySelectorAll(
+            ".transaction-item, .transaction-row, tr"
+        );
+
+        let count = rows.length;
+
+        const loading =
+            container.querySelector(".loading");
+
+        if (loading) {
+            count = 0;
+        }
+
+        return count;
+    }
+
+
+    function calculateFinancialHealth() {
+
+        const scoreElement =
+            document.getElementById("financialHealthScore");
+
+        const statusElement =
+            document.getElementById("financialHealthStatus");
+
+        const netCashFlowElement =
+            document.getElementById("financialNetCashFlow");
+
+        const cashFlowStatusElement =
+            document.getElementById("financialCashFlowStatus");
+
+        const positionElement =
+            document.getElementById("financialCurrentPosition");
+
+        const transactionCountElement =
+            document.getElementById("financialTransactionCount");
+
+
+        if (
+            !scoreElement ||
+            !statusElement ||
+            !netCashFlowElement ||
+            !cashFlowStatusElement ||
+            !positionElement ||
+            !transactionCountElement
+        ) {
+            return;
+        }
+
+
+        /* ---------------------------------------------
+           READ EXISTING DASHBOARD VALUES
+        --------------------------------------------- */
+
+        const balance =
+            getNumberFromElement("balanceValue");
+
+        const moneyIn =
+            getNumberFromElement("chartMoneyIn");
+
+        const moneyOut =
+            getNumberFromElement("chartMoneyOut");
+
+        const netFlow =
+            getNumberFromElement("chartNetFlow");
+
+
+        /* ---------------------------------------------
+           TRANSACTION COUNT
+        --------------------------------------------- */
+
+        let transactionCount =
+            getTransactionCount();
+
+
+        /*
+         * If the transaction list is not available yet,
+         * use the existing visualization counts.
+         */
+
+        if (transactionCount === 0) {
+
+            const deposits =
+                getNumberFromElement("chartDepositCount");
+
+            const withdrawals =
+                getNumberFromElement("chartWithdrawalCount");
+
+            const transfers =
+                getNumberFromElement("chartTransferCount");
+
+            const upi =
+                getNumberFromElement("chartUPICount");
+
+            transactionCount =
+                deposits +
+                withdrawals +
+                transfers +
+                upi;
+        }
+
+
+        /* ---------------------------------------------
+           CURRENT POSITION
+        --------------------------------------------- */
+
+        positionElement.textContent =
+            formatCurrency(balance);
+
+
+        /* ---------------------------------------------
+           NET CASH FLOW
+        --------------------------------------------- */
+
+        netCashFlowElement.textContent =
+            formatCurrency(netFlow);
+
+
+        if (netFlow > 0) {
+
+            cashFlowStatusElement.textContent =
+                "Positive cash flow";
+
+        } else if (netFlow < 0) {
+
+            cashFlowStatusElement.textContent =
+                "Negative cash flow";
+
+        } else {
+
+            cashFlowStatusElement.textContent =
+                "Balanced cash flow";
+        }
+
+
+        /* ---------------------------------------------
+           TRANSACTION COUNT
+        --------------------------------------------- */
+
+        transactionCountElement.textContent =
+            transactionCount +
+            (transactionCount === 1
+                ? " transaction"
+                : " transactions");
+
+
+        /* ---------------------------------------------
+           HEALTH SCORE
+        --------------------------------------------- */
+
+        let score = 50;
+
+
+        /*
+         * Positive cash flow improves the score.
+         */
+
+        if (netFlow > 0) {
+            score += 20;
+        } else if (netFlow < 0) {
+            score -= 15;
+        }
+
+
+        /*
+         * Healthy balance improves the score.
+         */
+
+        if (balance >= 10000) {
+            score += 15;
+        } else if (balance >= 5000) {
+            score += 10;
+        } else if (balance >= 1000) {
+            score += 5;
+        }
+
+
+        /*
+         * Compare money coming in and going out.
+         */
+
+        if (moneyIn > 0 && moneyOut > 0) {
+
+            const ratio =
+                moneyIn / moneyOut;
+
+            if (ratio >= 2) {
+                score += 10;
+            } else if (ratio >= 1.25) {
+                score += 5;
+            } else if (ratio < 1) {
+                score -= 10;
+            }
+        }
+
+
+        /*
+         * Keep score between 0 and 100.
+         */
+
+        score =
+            Math.max(
+                0,
+                Math.min(100, Math.round(score))
+            );
+
+
+        scoreElement.textContent =
+            score + "/100";
+
+
+        /* ---------------------------------------------
+           SCORE STATUS
+        --------------------------------------------- */
+
+        if (score >= 85) {
+
+            statusElement.textContent =
+                "Excellent";
+
+        } else if (score >= 70) {
+
+            statusElement.textContent =
+                "Good";
+
+        } else if (score >= 50) {
+
+            statusElement.textContent =
+                "Fair";
+
+        } else {
+
+            statusElement.textContent =
+                "Needs Attention";
+        }
+
+    }
+
+
+    function formatCurrency(value) {
+
+        return "₹" + Number(value || 0).toLocaleString(
+            "en-IN",
+            {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }
+        );
+    }
+
+
+    /* ---------------------------------------------
+       INITIAL RUN
+    --------------------------------------------- */
+
+    function initializeFinancialHealth() {
+
+        calculateFinancialHealth();
+
+        /*
+         * Existing dashboard.js updates the dashboard
+         * asynchronously after API responses.
+         *
+         * This keeps the Financial Health section
+         * synchronized without replacing existing
+         * dashboard functionality.
+         */
+
+        setTimeout(
+            calculateFinancialHealth,
+            1000
+        );
+
+        setTimeout(
+            calculateFinancialHealth,
+            2500
+        );
+
+        setTimeout(
+            calculateFinancialHealth,
+            5000
+        );
+    }
+
+
+    if (document.readyState === "loading") {
+
+        document.addEventListener(
+            "DOMContentLoaded",
+            initializeFinancialHealth
+        );
+
+    } else {
+
+        initializeFinancialHealth();
+    }
+
+
+    /*
+     * Recalculate whenever existing dashboard
+     * transaction values change.
+     */
+
+    window.updateFinancialHealth =
+        calculateFinancialHealth;
+
+})();

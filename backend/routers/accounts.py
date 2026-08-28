@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+import random
 
 from ..auth import get_current_user
 from ..database import get_db
@@ -12,6 +13,10 @@ router = APIRouter(
     tags=["Accounts"]
 )
 
+
+# =========================================================
+# CREATE BANK ACCOUNT
+# =========================================================
 
 @router.post(
     "/create",
@@ -31,11 +36,18 @@ def create_account(
             detail="Bank account already exists"
         )
 
-    import random
+    # Generate a unique 10-digit account number
+    while True:
+        account_number = str(
+            random.randint(1000000000, 9999999999)
+        )
 
-    account_number = str(
-        random.randint(1000000000, 9999999999)
-    )
+        existing_number = db.query(Account).filter(
+            Account.account_number == account_number
+        ).first()
+
+        if existing_number is None:
+            break
 
     account = Account(
         user_id=current_user.id,
@@ -50,6 +62,10 @@ def create_account(
 
     return account
 
+
+# =========================================================
+# GET MY ACCOUNT
+# =========================================================
 
 @router.get(
     "/",
@@ -72,7 +88,40 @@ def get_account(
     return account
 
 
-@router.get("/balance")
+# =========================================================
+# GET MY ACCOUNT - /accounts/me
+# =========================================================
+# Dashboard uses this endpoint.
+# =========================================================
+
+@router.get(
+    "/me",
+    response_model=AccountResponse
+)
+def get_my_account(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    account = db.query(Account).filter(
+        Account.user_id == current_user.id
+    ).first()
+
+    if account is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Bank account not found"
+        )
+
+    return account
+
+
+# =========================================================
+# GET ACCOUNT BALANCE
+# =========================================================
+
+@router.get(
+    "/balance"
+)
 def get_balance(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -93,7 +142,13 @@ def get_balance(
     }
 
 
-@router.get("/summary")
+# =========================================================
+# GET ACCOUNT SUMMARY
+# =========================================================
+
+@router.get(
+    "/summary"
+)
 def get_account_summary(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -108,17 +163,29 @@ def get_account_summary(
             detail="Bank account not found"
         )
 
+    # -----------------------------------------------------
+    # TOTAL DEPOSITS
+    # -----------------------------------------------------
+
     deposit_rows = db.query(Transaction.amount).filter(
         Transaction.receiver_account_id == account.id,
         Transaction.transaction_type == "Deposit",
         Transaction.status == "Success"
     ).all()
 
+    # -----------------------------------------------------
+    # TOTAL WITHDRAWALS
+    # -----------------------------------------------------
+
     withdrawal_rows = db.query(Transaction.amount).filter(
         Transaction.sender_account_id == account.id,
         Transaction.transaction_type == "Withdrawal",
         Transaction.status == "Success"
     ).all()
+
+    # -----------------------------------------------------
+    # TOTAL TRANSFERS
+    # -----------------------------------------------------
 
     transfer_rows = db.query(Transaction.amount).filter(
         Transaction.sender_account_id == account.id,
